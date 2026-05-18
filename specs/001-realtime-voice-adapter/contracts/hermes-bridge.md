@@ -52,11 +52,16 @@ provider-failure, controllable endpoint signal. Lets P1 loop, barge-in,
 reconnect, fallback, and 10× concurrency be validated against the fake while
 the real implementation is wired behind the verification gates.
 
-## Verification gates (from research.md)
+## Verification gates — RESOLVED against hermes-agent v0.13.0
 
-| Gate | Confirm in running Hermes build | Touches |
-|------|---------------------------------|---------|
-| VG-1 | STT/TTS provider interface names + signatures | real bridge impl |
-| VG-2 | Silence/end-of-utterance entrypoint + config thresholds | `detect_endpoint` |
-| VG-3 | Shared adapter→agent entrypoint + session ctx object | `agent_turn` |
-| VG-4 | Adapter registration hook + enable/restart CLI | registration shim |
+| Gate | Resolved entrypoint (live build) | Maps to |
+|------|----------------------------------|---------|
+| VG-1 | `tools.transcription_tools.transcribe_audio(file_path,model=None)->dict` | `stt_transcribe` (PCM→temp WAV) |
+| VG-1 | `tools.tts_tool.text_to_speech_tool(text,output_path=None)->str(JSON)` | `tts_synthesize` (JSON→file→bytes) |
+| VG-2 | `tools.voice_mode` `SILENCE_RMS_THRESHOLD=200` / `SILENCE_DURATION_SECONDS=3.0` rule (not the mic-bound `AudioRecorder`) | `detect_endpoint` |
+| VG-3 | Gateway session owns the agent; adapter is transport-only (matches discord/simplex) | `agent_turn` → gateway routing |
+| VG-4 | `gateway.platform_registry.PlatformRegistry.register(PlatformEntry(...))`; `hermes gateway` / `hermes gateway setup` | `adapter.register` shim |
+
+`HermesV013Bridge` implements this Protocol against the above; `FakeHermesBridge`
+remains the test boundary. Narrowed open sub-item: exact adapter
+connect/receive/send-reply methods (read one full built-in adapter on the host).

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-satellite-adapter"
+version = "0.1.0"
+description = "Hermes gateway platform adapter for realtime voice (STT/agent/TTS) over WebRTC"
+requires-python = ">=3.11"
+dependencies = [
+    "aiortc>=1.6",
+    "aiohttp>=3.9",
+    "av>=11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.4", "black>=24"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]

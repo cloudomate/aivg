@@ -80,9 +80,26 @@ curl -s localhost:8643/satellite/list | jq .
 # expect the loopback test client listed as "online" with its session state
 ```
 
-## 6. Before relying on a real Hermes build
+## 6. Wiring the real Hermes (v0.13.0) — gates resolved
 
-Close the research verification gates **VG-1..VG-4** (provider interface
-names, endpointing entrypoint, agent entrypoint, adapter registration/CLI).
-Only `hermes_bridge.py` + the registration shim change; the rest of the
-package and all tests stay as-is.
+VG-1..VG-4 are resolved (see research.md). On the Hermes host
+(`/home/ubuntu/.hermes/hermes-agent/`, venv at `…/venv`) implement
+`HermesV013Bridge` against the verified entrypoints:
+
+- STT: `from tools.transcription_tools import transcribe_audio` — write PCM to
+  a temp WAV, call `transcribe_audio(path)`, take the extracted text.
+- TTS: `from tools.tts_tool import text_to_speech_tool` — parse the returned
+  JSON, read `file_path`, decode → PCM/Opus.
+- Endpointing: reuse `tools.voice_mode.SILENCE_RMS_THRESHOLD` /
+  `SILENCE_DURATION_SECONDS` (the RMS/duration rule) over decoded WebRTC PCM.
+- Register: `PlatformRegistry.register(PlatformEntry(name="satellite_webrtc",
+  source="plugin", adapter_factory=…, check_fn=…))`; manage with
+  `hermes gateway` / configure with `hermes gateway setup`.
+
+Only `hermes_bridge.py` (new `HermesV013Bridge`) and `adapter.py` change; the
+package core and the entire fake-driven test suite stay as-is. Remaining
+narrowed item: confirm the exact adapter connect/receive/send-reply methods by
+reading one full built-in adapter (`gateway/platforms/discord.py`) on the host.
+
+> Note: the `ssh hermes` host key changed during this work — verify the
+> fingerprint is expected before trusting/connecting for the live wiring.

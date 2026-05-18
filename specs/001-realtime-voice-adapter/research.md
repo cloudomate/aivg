@@ -161,15 +161,40 @@ decision is relied upon (constitution Principle V).
 
 ---
 
-## Summary of running-build verification gates (carry into tasks)
+## Running-build verification gates — RESOLVED (hermes-agent v0.13.0)
 
-| Gate | What to confirm | Blocking for |
-|------|-----------------|--------------|
-| VG-1 | STT/TTS provider interface names + signatures | D5 wiring |
-| VG-2 | Silence/end-of-utterance entrypoint + config-driven thresholds | D6 |
-| VG-3 | Shared adapter→agent entrypoint + session context object | D7 |
-| VG-4 | Adapter registration hook + enable/restart CLI surface | D8 |
+Resolved 2026-05-18 by **read-only** inspection of the live Hermes over
+`ssh hermes` (editable install at `/home/ubuntu/.hermes/hermes-agent/`, source
+root confirmed via the `__editable__` finder; CLI `/home/ubuntu/.local/bin/hermes`
+→ venv `/home/ubuntu/.hermes/hermes-agent/venv`). No files on the host were
+modified. ⚠️ The host's SSH key changed (`known_hosts:55`,
+`SHA256:pvyq5gFR2qA1kfDqsIKj7RDE7BeTD8gfwMIL8g7USkE`) — confirm this is
+expected re-provisioning, not a MITM, before fully trusting these findings.
 
-All four are isolated behind `hermes_bridge.py` + the adapter registration
-shim, so the rest of the package is implementable and testable now against the
-fake bridge; only these seams change if the running build differs.
+| Gate | Verified entrypoint | Decision |
+|------|---------------------|----------|
+| **VG-1 STT** ✅ | `tools.transcription_tools.transcribe_audio(file_path: str, model: Optional[str]=None) -> Dict`; provider/fallback from `_load_stt_config()` (local/groq/openai/mistral/xai); `is_stt_enabled()`; `_extract_transcript_text` | Bridge writes accumulated inbound PCM to a temp WAV (ffmpeg/`av`), calls `transcribe_audio()`, returns extracted text. Provider/fallback inherited from config — adapter passes none (FR-006). |
+| **VG-1 TTS** ✅ | `tools.tts_tool.text_to_speech_tool(text: str, output_path: Optional[str]=None) -> str` (JSON: success/file_path/`MEDIA:` tag); provider+voice from `tts:` config | Bridge calls it, parses JSON, reads `file_path` audio → PCM → Opus outbound. Hermes also bundles Piper/Kitten internally; the adapter never selects a provider, so constitution-I "don't introduce Piper" holds. |
+| **VG-2 endpointing** ✅ (with nuance) | `tools.voice_mode`: `SILENCE_RMS_THRESHOLD=200`, `SILENCE_DURATION_SECONDS=3.0`, speech-confirm/resume logic in `AudioRecorder` | The **authoritative rule** (RMS<200 ⇒ silence; 3.0 s ⇒ end) is reused exactly (matches spec FR-005 / design §8.1). The `AudioRecorder` class is sounddevice/mic-bound and is **not** reusable for an RTP stream; the bridge applies the same constants/logic to decoded WebRTC PCM frames. Faithful reuse of the algorithm; different transport. |
+| **VG-3 agent** ✅ (architecture) | Built-in adapters (`discord.py`, `simplex.py`) contain **no** agent call — the gateway session loop owns the agent; adapters are transport-only | Adapter delivers the user turn as a platform message; the gateway invokes the agent (exactly constitution IV). **Narrowed sub-item:** the precise adapter inbound/outbound message methods (connect/receive/send-reply) — lift by reading one full built-in adapter on the host; touches only the registration shim. |
+| **VG-4 registration** ✅ | `gateway.platform_registry.PlatformRegistry.register(PlatformEntry(name,label,adapter_factory:Callable[[PlatformConfig],adapter],check_fn,validate_config?,is_connected?,required_env,source,plugin_name))`; lifecycle `hermes gateway`; config `hermes gateway setup` | Register `PlatformEntry(name="satellite_webrtc", source="plugin", adapter_factory=…, check_fn=aiortc-available)`. Config block `satellite:` in the existing `~/.hermes/config.yaml` (same `GatewayConfig` loader as `stt:`/`tts:`). |
+
+### D13–D17 (added by the re-plan)
+
+- **D13 STT path**: PCM→temp WAV→`transcribe_audio`. Rationale: it is the
+  public, fallback-aware STT entrypoint and is file-based. Alternative
+  (private `_transcribe_*`) rejected — bypasses fallback/config.
+- **D14 TTS path**: `text_to_speech_tool`→JSON→file→bytes. Rationale: only
+  public TTS entrypoint, config-driven provider/voice. No SDP/codec coupling.
+- **D15 endpointing**: reuse `voice_mode` constants + RMS/duration logic over
+  WebRTC PCM; do **not** reuse `AudioRecorder` (mic-bound). Honest partial
+  reuse; same authoritative rule.
+- **D16 agent**: adapter is a transport-only `PlatformRegistry` platform; the
+  gateway session drives the agent (no per-adapter agent call), matching
+  constitution IV. One in-flight turn per session enforced adapter-side.
+- **D17 registration**: `PlatformEntry` factory + `check_fn`; ship as a
+  plugin-source platform; `hermes gateway` / `hermes gateway setup` lifecycle.
+
+Only `hermes_bridge.py` (new `HermesV013Bridge`) and `adapter.py` (concrete
+`PlatformEntry`) change. Package core, `session.py`, two-plane split, and the
+full fake-driven test suite are untouched — the seam worked as designed.
