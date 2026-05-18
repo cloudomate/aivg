@@ -38,7 +38,10 @@ class SatelliteWebRTCAdapter:
         self.bridge: HermesBridge = bridge or UnboundHermesBridge()
         self.management = ManagementService(self.registry, self.sink, self.cfg)
         self.signaling = SignalingService(
-            self.registry, self.bridge, self.sink, transport_factory
+            self.registry, self.bridge, self.sink, transport_factory,
+            # Fan call-scoped UI events (state/partial transcript/barge-in)
+            # onto the control-plane WS subscribers (constitution III).
+            ui_broadcast=self.management._broadcast,
         )
         self._sites: list = []
 
@@ -114,7 +117,11 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
     #    there is NO `chat_id` kwarg on MessageEvent.
     from gateway.config import Platform  # type: ignore
     from gateway.platform_registry import PlatformEntry  # type: ignore
-    from gateway.platforms.base import BasePlatformAdapter, MessageEvent  # type: ignore
+    from gateway.platforms.base import (  # type: ignore
+        BasePlatformAdapter,
+        MessageEvent,
+        SendResult,
+    )
     from gateway.session import SessionSource  # type: ignore
 
     from .hermes_bridge import HermesV013Bridge, SessionCtx
@@ -157,10 +164,14 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             # chat_id == VoiceSession.session_id; this is a 1:1 voice "dm".
             return {"chat_id": chat_id, "chat_type": "dm", "platform": "satellite_webrtc"}
 
-        async def send(self, chat_id, text, reply_to=None, **kw):
+        async def send(self, chat_id, content, reply_to=None, metadata=None, **kw):
+            # Hermes calls send(chat_id=, content=, reply_to=, metadata=) and
+            # consumes a SendResult (gateway/platforms/base.py:2485). Verified
+            # against hermes-agent v0.13.0 (telegram adapter parity).
             fut = self._satellite_reply_futs.pop(chat_id, None)
             if fut and not fut.done():
-                fut.set_result(text)  # hand the agent reply to the bridge
+                fut.set_result(content)  # hand the agent reply to the bridge
+            return SendResult(success=True, message_id=None)
 
     return PlatformEntry(
         name="satellite_webrtc",

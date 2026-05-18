@@ -52,7 +52,14 @@ async function connect() {
   pc = new RTCPeerConnection();
   micStream.getTracks().forEach((t) => { t.enabled = false; pc.addTrack(t, micStream); });
   pc.ontrack = (ev) => {
-    $("far").srcObject = ev.streams[0];
+    // aiortc may not advertise a MediaStream id, so ev.streams can be empty
+    // even though RTP arrives — fall back to wrapping the bare track.
+    const ms = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
+    const far = $("far");
+    far.srcObject = ms;
+    far.muted = false;
+    far.play().then(() => log("far audio playing (" + ev.track.kind + ")"))
+      .catch((e) => log("far .play() blocked: " + e + " — click the page once"));
     ev.track.onunmute = () => { if (eosAt) {
       $("lat").textContent = Math.round(performance.now() - eosAt); eosAt = 0; } };
   };
@@ -79,3 +86,29 @@ const ptt = $("ptt");
 ptt.onmousedown = () => talk(true);
 ptt.onmouseup = () => talk(false);
 ptt.onmouseleave = () => speaking && talk(false);
+
+// Inbound-audio diagnostics → printed into the log panel (no DevTools).
+$("stats").onclick = async () => {
+  if (!pc) { log("stats: not connected"); return; }
+  try {
+    const s = await pc.getStats();
+    let out = "— inbound audio stats —\n";
+    s.forEach((r) => {
+      if (r.type === "inbound-rtp" && r.kind === "audio")
+        out += `inbound-rtp pkts=${r.packetsReceived} bytes=${r.bytesReceived} ` +
+          `lost=${r.packetsLost} audioLevel=${r.audioLevel} ` +
+          `energy=${r.totalAudioEnergy} samples=${r.totalSamplesReceived} ` +
+          `concealed=${r.concealedSamples} jbDelay=${r.jitterBufferDelay}\n`;
+      if (r.type === "transport")
+        out += `transport bytesReceived=${r.bytesReceived} bytesSent=${r.bytesSent}\n`;
+    });
+    const far = $("far");
+    const t = far.srcObject && far.srcObject.getAudioTracks()[0];
+    out += `far: muted=${far.muted} paused=${far.paused} vol=${far.volume} ` +
+           `readyState=${far.readyState} sinkId=${far.sinkId || "default"}\n`;
+    out += `recv-track: ${t ? `muted=${t.muted} enabled=${t.enabled} state=${t.readyState}` : "none"}\n`;
+    out += `outputs: ${(await navigator.mediaDevices.enumerateDevices())
+      .filter((d) => d.kind === "audiooutput").map((d) => d.label || d.deviceId).join(" | ") || "none"}\n`;
+    log(out);
+  } catch (e) { log("stats ERR " + e); }
+};

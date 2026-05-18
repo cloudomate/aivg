@@ -193,6 +193,16 @@ class HermesV013Bridge:
                     w.setframerate(self._sr)
                     w.writeframes(pcm)
                 result = transcribe_audio(fh.name)  # provider/fallback from config
+            # transcribe_audio (v0.13.0) returns {"success","transcript",
+            # "provider"}; Hermes's _extract_transcript_text only knows the
+            # "text" key, so it would str(dict) the whole payload. Pull the
+            # transcript directly; fall back to the helper for str/other shapes.
+            if isinstance(result, dict):
+                if not result.get("success", True):
+                    raise AllProvidersUnavailable(
+                        result.get("error", "STT failed")
+                    )
+                return (result.get("transcript") or result.get("text") or "").strip()
             return _extract_transcript_text(result)
 
         return await asyncio.to_thread(_work)

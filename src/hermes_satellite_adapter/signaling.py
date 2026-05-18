@@ -31,11 +31,16 @@ class SignalingService:
         bridge: HermesBridge,
         sink: LogSink,
         transport_factory: TransportFactory,
+        ui_broadcast=None,
     ) -> None:
         self._reg = registry
         self._bridge = bridge
         self._sink = sink
         self._make_transport = transport_factory
+        # Optional fan-out for call-scoped UI events (state / partial
+        # transcript / barge-in) onto the control-plane WS (constitution III:
+        # these are non-durable; durable control stays on the WS proper).
+        self._ui_broadcast = ui_broadcast
         self._tasks: dict[str, asyncio.Task] = {}
 
     async def handle_offer(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -47,7 +52,20 @@ class SignalingService:
         answer_sdp, transport = await self._make_transport(body["sdp"], device_id)
         sess_model = self._reg.open_session(device_id)
         sess_model.webrtc_state = transport.connection_state
-        session = Session(sess_model, transport, self._bridge, self._sink)
+        # Make the outbound media path observable in gateway.log via the
+        # visible JSON LogSink (constitution V — verify before relying).
+        if hasattr(transport, "attach_sink"):
+            transport.attach_sink(self._sink, device_id)
+        ui_sink = None
+        if self._ui_broadcast is not None:
+            def ui_sink(evt, _dev=device_id):  # noqa: WPS430
+                try:
+                    self._ui_broadcast({**evt, "device_id": _dev})
+                except Exception:  # noqa: BLE001 - UI fan-out must never break voice
+                    pass
+        session = Session(
+            sess_model, transport, self._bridge, self._sink, ui_sink=ui_sink
+        )
         self._tasks[sess_model.session_id] = asyncio.create_task(self._run(session))
         self._sink.emit(
             device_id, LogLevel.INFO, LogSource.WEBRTC, "session opened",
@@ -129,6 +147,24 @@ class AiortcTransport:  # pragma: no cover - host-only (needs aiortc/av)
         self._in_buf: list[bytes] = []
         self._resampler = None  # built lazily on first inbound frame
         self._closed = False
+        self._sink = None
+        self._dev = "?"
+        self._in_seen = False
+
+    def attach_sink(self, sink, device_id: str) -> None:
+        """Wire the visible JSON LogSink so the outbound media path is
+        observable in gateway.log (constitution V)."""
+        self._sink = sink
+        self._dev = device_id
+
+    def _emit(self, msg: str, **meta) -> None:
+        try:
+            if self._sink is not None:
+                self._sink.emit(
+                    self._dev, LogLevel.INFO, LogSource.WEBRTC, msg, meta or None
+                )
+        except Exception:  # noqa: BLE001 - logging must never affect audio
+            pass
 
     # --- inbound: caller Opus → s16 mono 48 kHz, uniform 20 ms frames ----
     async def receive(self):
@@ -173,13 +209,22 @@ class AiortcTransport:  # pragma: no cover - host-only (needs aiortc/av)
         import av  # noqa: WPS433
 
         if not pcm or len(pcm) < 16:
+            self._emit("send_audio: empty/sentinel, nothing emitted", n=len(pcm or b""))
             return  # empty / tool-only / sentinel → emit nothing (C4)
+        head = pcm[:4]
+        self._emit("send_audio: received TTS bytes", n=len(pcm), head=repr(head))
         try:
             container = av.open(io.BytesIO(pcm))
         except Exception as exc:  # noqa: BLE001 - undecodable/sentinel: drop
-            self._sink_drop(f"undecodable outbound audio dropped: {exc}")
+            self._emit("send_audio: av.open FAILED (dropped)", err=str(exc))
             return
+        import array as _array
+
         resampler = av.AudioResampler(format="s16", layout="mono", rate=_SR)
+        enq = 0
+        peak = 0          # max |sample| across all decoded PCM (0 ⇒ silence)
+        raw_total = 0
+        first_meta = None
         try:
             for frame in container.decode(audio=0):
                 out = resampler.resample(frame)
@@ -190,15 +235,38 @@ class AiortcTransport:  # pragma: no cover - host-only (needs aiortc/av)
                         b = f.planes[0].to_bytes()
                     except AttributeError:
                         b = bytes(f.planes[0])
-                    for chunk in self._framer.push(b[: f.samples * 2]):
+                    seg = b[: f.samples * 2]
+                    raw_total += len(seg)
+                    if first_meta is None:
+                        first_meta = {
+                            "fmt": getattr(f.format, "name", "?"),
+                            "lay": getattr(f.layout, "name", "?"),
+                            "rate": getattr(f, "sample_rate", "?"),
+                            "samples": f.samples,
+                            "plane_len": len(b),
+                            "seg_len": len(seg),
+                        }
+                    if seg:
+                        a = _array.array("h")
+                        a.frombytes(seg[: len(seg) - (len(seg) % 2)])
+                        for s in a:
+                            v = -s if s < 0 else s
+                            if v > peak:
+                                peak = v
+                    for chunk in self._framer.push(seg):
                         await self._out_q.put(chunk)
+                        enq += 1
             tail = self._framer.flush()
             if tail:
                 await self._out_q.put(tail)
+                enq += 1
         except Exception as exc:  # noqa: BLE001 - never kill the session (C4)
-            self._sink_drop(f"outbound decode aborted, partial dropped: {exc}")
+            self._emit("send_audio: decode aborted (partial)", err=str(exc), enqueued=enq)
         finally:
             container.close()
+        self._emit("send_audio: enqueued frames for playback", frames=enq,
+                   approx_seconds=round(enq * _FRAME_MS / 1000.0, 2),
+                   pcm_peak=peak, raw_bytes=raw_total, first=first_meta)
 
     async def stop_playback(self) -> None:
         # Barge-in: drop everything queued; the outbound track falls back to
@@ -224,15 +292,6 @@ class AiortcTransport:  # pragma: no cover - host-only (needs aiortc/av)
                 pass
         try:
             await self._pc.close()
-        except Exception:  # noqa: BLE001
-            pass
-
-    def _sink_drop(self, msg: str) -> None:
-        # Best-effort breadcrumb; a logging failure must never affect audio.
-        try:
-            import logging
-
-            logging.getLogger("hermes_satellite_adapter.media").info(msg)
         except Exception:  # noqa: BLE001
             pass
 
@@ -268,10 +327,14 @@ async def aiortc_transport_factory(offer_sdp: str, device_id: str):  # pragma: n
             self._pts = 0
             self._start = None
             self._silence = b"\x00" * _FRAME_BYTES
+            self._n = 0          # total recv() pulls by aiortc's sender
+            self._real = 0       # frames that carried real (queued) audio
+            self._tx = None      # AiortcTransport, bound post-construction
 
         async def recv(self):
             if self.readyState != "live":
                 raise MediaStreamError
+            self._n += 1
             now = time.time()
             if self._start is None:
                 self._start = now
@@ -282,17 +345,44 @@ async def aiortc_transport_factory(offer_sdp: str, device_id: str):  # pragma: n
                     await asyncio.sleep(delay)
             try:
                 data = out_q.get_nowait()
+                self._real += 1
             except Exception:  # noqa: BLE001 - QueueEmpty → silence
                 data = self._silence
+            if self._tx is not None and (self._n == 1 or self._n % 100 == 0):
+                self._tx._emit(
+                    "outbound track: aiortc pulling",
+                    pulls=self._n, real_frames=self._real, qsize=out_q.qsize(),
+                )
+            # Exactly _FRAME_BYTES (1920 = 960 s16 mono samples). aiortc's
+            # plane.update requires len == plane.buffer_size; for s16/mono/960
+            # that IS 1920, so feed the exact buffer and never index len(plane)
+            # (the previous len(plane) path could mis-size and raise, which
+            # killed the sender after a single pull — the observed bug).
             if len(data) != _FRAME_BYTES:
-                data = (data + self._silence)[:_FRAME_BYTES]
-            frame = av.AudioFrame(format="s16", layout="mono", samples=_SAMPLES_PER_FRAME)
-            plane = frame.planes[0]
-            buf = data if len(data) == len(plane) else (data + b"\x00" * len(plane))[: len(plane)]
-            plane.update(buf)
-            frame.sample_rate = _SR
-            frame.pts = self._pts
-            frame.time_base = Fraction(1, _SR)
+                data = (bytes(data) + self._silence)[:_FRAME_BYTES]
+            try:
+                frame = av.AudioFrame(
+                    format="s16", layout="mono", samples=_SAMPLES_PER_FRAME
+                )
+                frame.planes[0].update(data)
+                frame.sample_rate = _SR
+                frame.pts = self._pts
+                frame.time_base = Fraction(1, _SR)
+            except Exception as exc:  # noqa: BLE001 - report once, stay alive
+                if self._tx is not None and not getattr(self, "_frame_err", False):
+                    self._frame_err = True
+                    self._tx._emit(
+                        "outbound track: FRAME BUILD FAILED",
+                        err=f"{type(exc).__name__}: {exc}",
+                    )
+                # Keep the sender alive with a guaranteed-valid silent frame
+                # so we don't lose the whole call to one bad frame.
+                frame = av.AudioFrame(
+                    format="s16", layout="mono", samples=_SAMPLES_PER_FRAME
+                )
+                frame.sample_rate = _SR
+                frame.pts = self._pts
+                frame.time_base = Fraction(1, _SR)
             self._pts += _SAMPLES_PER_FRAME
             return frame
 
@@ -304,10 +394,21 @@ async def aiortc_transport_factory(offer_sdp: str, device_id: str):  # pragma: n
         if track.kind == "audio" and not audio_in.done():
             audio_in.set_result(track)
 
-    out_track = _OutboundAudioTrack()
-    pc.addTrack(out_track)
-
     await pc.setRemoteDescription(RTCSessionDescription(sdp=offer_sdp, type="offer"))
+    # Canonical aiortc answerer order: setRemoteDescription FIRST, then attach
+    # the send track so it binds to the transceiver the offer negotiated
+    # sendrecv. Adding before setRemoteDescription can park it on a separate
+    # non-sending transceiver → the browser sees a track but no RTP ever
+    # arrives (silent playback — the exact symptom observed).
+    out_track = _OutboundAudioTrack()
+    audio_tr = next(
+        (t for t in pc.getTransceivers() if t.kind == "audio"), None
+    )
+    if audio_tr is not None:
+        audio_tr.sender.replaceTrack(out_track)
+        audio_tr.direction = "sendrecv"
+    else:
+        pc.addTrack(out_track)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)  # aiortc full-gathers before resolving
 
@@ -320,7 +421,9 @@ async def aiortc_transport_factory(offer_sdp: str, device_id: str):  # pragma: n
             f"failing the offer (no media path possible)."
         ) from exc
 
-    return pc.localDescription.sdp, AiortcTransport(pc, in_track, out_track, out_q)
+    transport = AiortcTransport(pc, in_track, out_track, out_q)
+    out_track._tx = transport  # enable outbound-egress breadcrumbs
+    return pc.localDescription.sdp, transport
 
 
 def build_signaling_app(service: "SignalingService"):  # pragma: no cover

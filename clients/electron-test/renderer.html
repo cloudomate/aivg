@@ -18,9 +18,9 @@
   <body>
     <h3>Hermes Satellite — live test (feature 003)</h3>
     <div class="row">
-      mgmt <input id="mgmt" value="http://localhost:8643" />
-      webrtc <input id="webrtc" value="http://localhost:8644" />
-      ws <input id="ws" value="ws://localhost:8643/satellite/ws" />
+      mgmt <input id="mgmt" value="http://192.168.4.140:8643" />
+      webrtc <input id="webrtc" value="http://192.168.4.140:8644" />
+      ws <input id="ws" value="ws://192.168.4.140:8643/satellite/ws" />
     </div>
     <div class="row">
       <button id="connect">Connect</button>
@@ -28,6 +28,7 @@
       end-of-speech→reply: <span id="lat">—</span> ms
     </div>
     <button id="ptt" disabled>Push & hold to talk</button>
+    <button id="stats">stats (inbound audio)</button>
     <div class="row">transcript: <span id="tx">—</span></div>
     <div class="row">reply: <span id="rep">—</span></div>
     <div class="log" id="log"></div>
