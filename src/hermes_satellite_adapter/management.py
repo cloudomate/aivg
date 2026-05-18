@@ -189,8 +189,61 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
     async def _logs(req):
         return web.json_response(service.query_logs(**dict(req.query)))
 
+    async def _ws(req):
+        """Always-on control-plane WebSocket (constitution III): register,
+        heartbeat, and server→client fan-out (state/config/barge-in). Separate
+        from the voice PeerConnection; survives with no active call. Reuses
+        ``ManagementService`` (constitution IV) — no new state."""
+        import asyncio  # noqa: WPS433
+        import json  # noqa: WPS433
+
+        ws = web.WebSocketResponse(heartbeat=55.0)
+        await ws.prepare(req)
+        loop = asyncio.get_event_loop()
+
+        async def _safe_send(msg: dict) -> None:
+            try:
+                if not ws.closed:
+                    await ws.send_json(msg)
+            except Exception:  # noqa: BLE001 - dead socket must not crash fan-out
+                pass
+
+        def _push(msg: dict) -> None:
+            # _broadcast invokes this synchronously; hop back onto the loop.
+            if not ws.closed:
+                asyncio.run_coroutine_threadsafe(_safe_send(msg), loop)
+
+        unsubscribe = service.subscribe_ws(_push)
+        try:
+            async for raw in ws:
+                if raw.type != web.WSMsgType.TEXT:
+                    continue
+                try:
+                    msg = json.loads(raw.data)
+                except Exception:  # noqa: BLE001 - ignore malformed frames
+                    continue
+                kind = msg.get("type")
+                if kind == "register":
+                    try:
+                        await ws.send_json(
+                            {"type": "registered", **service.register(msg)}
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif kind == "heartbeat":
+                    dev = msg.get("device_id")
+                    if dev:
+                        service.heartbeat(dev)
+                # other client message types are non-durable / ignored here
+        finally:
+            unsubscribe()
+            if not ws.closed:
+                await ws.close()
+        return ws
+
     app.add_routes(
         [
+            web.get("/satellite/ws", _ws),
             web.post("/satellite/register", _register),
             web.get("/satellite/list", _list),
             web.get("/satellite/{id}/state", _state),
