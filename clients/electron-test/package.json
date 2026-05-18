@@ -1,0 +1,13 @@
+{
+  "name": "hermes-satellite-electron-test",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Electron satellite-#3 client to live-test the deployed Hermes voice adapter (feature 003). No STT/TTS/agent libs (constitution I).",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}

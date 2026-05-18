@@ -1,0 +1,21 @@
+name: satellite-webrtc-platform
+label: Satellite WebRTC
+kind: platform
+version: 0.1.0
+description: >
+  Realtime voice satellite gateway adapter for Hermes Agent. Bridges a
+  WebRTC voice client (browser/Electron/RPi/ESP32) to Hermes's existing
+  STT / agent / TTS via the gateway's provider layer. Thin transport +
+  registry only — no embedded speech intelligence (project constitution I).
+author: hermes-voice-gateway (feature 003)
+# Optional env knobs; the satellite: block in ~/.hermes/config.yaml is the
+# primary configuration surface (constitution IV — existing loader reused).
+optional_env:
+  - name: SATELLITE_MGMT_PORT
+    description: "Management/control-plane port (default 8643)"
+    prompt: "Satellite management port"
+    password: false
+  - name: SATELLITE_WEBRTC_PORT
+    description: "WebRTC signaling port (default 8644)"
+    prompt: "Satellite WebRTC port"
+    password: false

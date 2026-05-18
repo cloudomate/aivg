@@ -19,3 +19,8 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# Node / Electron client
+node_modules/
+# deploy run-state
+deploy/.state/
