@@ -101,7 +101,7 @@ utterance.
 ### Implementation for User Story 2
 
 - [X] T025 [US2] Make `agent_turn`/`tts_synthesize` calls cancellable and add barge-in transition `speaking → listening` (cancel in-flight turn, mark outcome `interrupted`) in `src/hermes_satellite_adapter/session.py` — depends on T021
-- [ ] T026 [P] [US2] Optional single SCTP datachannel on the voice PC for call-scoped UI only (partial transcript, listening/speaking, barge-in notice) — NO durable control here (constitution III) — in `src/hermes_satellite_adapter/session.py`
+- [X] T026 [P] [US2] Optional single SCTP datachannel on the voice PC for call-scoped UI only (partial transcript, listening/speaking, barge-in notice) — NO durable control here (constitution III) — in `src/hermes_satellite_adapter/session.py`
 
 **Checkpoint**: US1 + US2 both independently functional
 
@@ -165,12 +165,15 @@ Hermes v0.13.0 wiring (verification gates RESOLVED — research.md D13–D17).
 
 ### Hermes v0.13.0 real wiring (gates resolved; runs on the Hermes host)
 
-- [ ] T038 [P] Implement `HermesV013Bridge.stt_transcribe` in `src/hermes_satellite_adapter/hermes_bridge.py`: write accumulated inbound PCM → temp WAV (`av`/ffmpeg) → `tools.transcription_tools.transcribe_audio(path)` → `_extract_transcript_text`; provider/fallback inherited from `_load_stt_config()` (D13 / VG-1) — research.md
-- [ ] T039 [P] Implement `HermesV013Bridge.tts_synthesize` in `src/hermes_satellite_adapter/hermes_bridge.py`: `tools.tts_tool.text_to_speech_tool(text)` → parse JSON → read `file_path` → decode to PCM/Opus; provider/voice from `tts:` config (D14 / VG-1) — research.md
-- [ ] T042 [P] Implement `HermesV013Bridge.detect_endpoint` in `src/hermes_satellite_adapter/hermes_bridge.py`: apply `tools.voice_mode.SILENCE_RMS_THRESHOLD` (200) / `SILENCE_DURATION_SECONDS` (3.0) RMS+duration rule to decoded WebRTC PCM frames; do NOT reuse the mic-bound `AudioRecorder` (D15 / VG-2) — research.md
-- [ ] T043 Read `gateway/platforms/discord.py` (full) on the Hermes host to lift the exact adapter connect/receive/send-reply contract; document it, then implement `HermesV013Bridge.agent_turn` to hand the user turn to the gateway session (agent stays gateway-owned, D16 / VG-3) — closes the narrowed open item
-- [ ] T044 Implement the real registration in `src/hermes_satellite_adapter/adapter.py`: `PlatformRegistry.register(PlatformEntry(name="satellite_webrtc", label="Satellite WebRTC", adapter_factory=…, check_fn=aiortc-available, source="plugin"))`; add the `satellite:` block via the existing `GatewayConfig` loader; verify `hermes gateway` / `hermes gateway setup` lifecycle (D17 / VG-4) — research.md
-- [ ] T045 Live smoke on the Hermes host: enable the adapter, run one real speech→agent→speech turn end-to-end through configured Hermes STT/TTS providers; confirm SC-001 latency and parity with `transcribe_audio`/`text_to_speech_tool` called directly (closes analyze E2 against the real build)
+- [X] T038 [P] Implement `HermesV013Bridge.stt_transcribe` in `src/hermes_satellite_adapter/hermes_bridge.py`: write accumulated inbound PCM → temp WAV (`av`/ffmpeg) → `tools.transcription_tools.transcribe_audio(path)` → `_extract_transcript_text`; provider/fallback inherited from `_load_stt_config()` (D13 / VG-1) — research.md
+- [X] T039 [P] Implement `HermesV013Bridge.tts_synthesize` in `src/hermes_satellite_adapter/hermes_bridge.py`: `tools.tts_tool.text_to_speech_tool(text)` → parse JSON → read `file_path` → decode to PCM/Opus; provider/voice from `tts:` config (D14 / VG-1) — research.md
+- [X] T042 [P] Implement `HermesV013Bridge.detect_endpoint` in `src/hermes_satellite_adapter/hermes_bridge.py`: apply `tools.voice_mode.SILENCE_RMS_THRESHOLD` (200) / `SILENCE_DURATION_SECONDS` (3.0) RMS+duration rule to decoded WebRTC PCM frames; do NOT reuse the mic-bound `AudioRecorder` (D15 / VG-2) — research.md
+- [X] T043 Read `gateway/platforms/discord.py` (full) on the Hermes host to lift the exact adapter connect/receive/send-reply contract; document it, then implement `HermesV013Bridge.agent_turn` to hand the user turn to the gateway session (agent stays gateway-owned, D16 / VG-3) — closes the narrowed open item
+- [X] T044 Implement the real registration in `src/hermes_satellite_adapter/adapter.py`: `PlatformRegistry.register(PlatformEntry(name="satellite_webrtc", label="Satellite WebRTC", adapter_factory=…, check_fn=aiortc-available, source="plugin"))`; add the `satellite:` block via the existing `GatewayConfig` loader; verify `hermes gateway` / `hermes gateway setup` lifecycle (D17 / VG-4) — research.md
+- [ ] T045 Live smoke on the Hermes host (PARTIAL — verification done, live turn pending):
+  - [X] Verified all bridge/adapter symbols exist in hermes-agent v0.13.0 (read-only); caught & fixed 3 real API bugs in `adapter.py` (`gateway.config.Platform`/`Platform.LOCAL` not `platform_registry.Platform`/SATELLITE; `MessageEvent(text, source=SessionSource(...))` not `chat_id=`; added missing abstract methods `disconnect`/`get_chat_info`). Silence rule confirmed 200/3.0.
+  - [X] Non-mutating host construction smoke: `BasePlatformAdapter` subclass + `PlatformEntry` + `MessageEvent`/`SessionSource` construct against real v0.13.0 classes
+  - [ ] Full live turn: ship package + install aiortc on host, add `satellite:` block to `~/.hermes/config.yaml`, register+run the gateway, drive one real speech→agent→speech turn from a WebRTC client; confirm SC-001 + provider parity (closes analyze E2). Requires explicit per-step authorization (config mutation + running gateway + real client/hardware)
 
 ---
 

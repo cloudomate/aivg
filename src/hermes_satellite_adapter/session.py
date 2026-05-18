@@ -63,14 +63,27 @@ class Session:
         transport: MediaTransport,
         bridge: HermesBridge,
         sink: LogSink,
+        ui_sink: "Optional[callable]" = None,
     ) -> None:
         self.model = model
         self._transport = transport
         self._bridge = bridge
         self._sink = sink
+        # Call-scoped UI events ONLY (partial transcript, listening/speaking,
+        # barge-in). Production wires this to a single SCTP datachannel on the
+        # voice PC. Durable control NEVER flows here (constitution III).
+        self._ui_sink = ui_sink
         self._ctx = SessionCtx(device_id=model.device_id, session_id=model.session_id)
         self._stopped = asyncio.Event()
         self._pending_frame: Optional[bytes] = None
+
+    def _ui(self, kind: str, **data) -> None:
+        if self._ui_sink is None:
+            return
+        try:
+            self._ui_sink({"type": kind, "session_id": self.model.session_id, **data})
+        except Exception:
+            pass  # a UI sink failure must never affect the voice path
 
     # --- helpers ---------------------------------------------------------
     def _log(self, level: LogLevel, source: LogSource, msg: str, **meta) -> None:
@@ -80,6 +93,7 @@ class Session:
         self.model.state = state
         self.model.touch()
         self.model.webrtc_state = self._transport.connection_state
+        self._ui("state", state=state.value)
 
     async def _next_frame(self) -> Optional[bytes]:
         if self._pending_frame is not None:
@@ -135,6 +149,7 @@ class Session:
                 b"".join(utterance), ctx=self._ctx
             )
             self._log(LogLevel.INFO, LogSource.ASR, "transcribed", text=turn.user_text)
+            self._ui("partial_transcript", text=turn.user_text)
 
             pipeline = asyncio.create_task(self._respond(turn))
             watcher = asyncio.create_task(self._watch_for_bargein())
@@ -153,6 +168,7 @@ class Session:
                     pass
                 self._pending_frame = watcher.result()
                 turn.outcome = TurnOutcome.INTERRUPTED
+                self._ui("barge_in")
                 self._log(
                     LogLevel.INFO,
                     LogSource.SYSTEM,
