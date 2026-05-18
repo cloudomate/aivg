@@ -100,6 +100,8 @@ regression
 ---
 
 ## Phase 6: User Story 4
+> **US4 audio PROVEN 2026-05-18** (commit 49d47bd): spoken phrase → audible agent reply through the production gateway, LAN-direct client. T015 done. Remaining optional: T016 barge-in ≤300ms, T017 ≥3-turn stability + re-offer, T020 archive. Required extra fix-forwards (out of 005 media scope, now landed): /satellite/ws control WS, send() signature, transcript unwrap, transceiver bind, Hermes pairing approval.
+
 > **US4 BLOCKED (external defect, not feature 005):** live testing on 2026-05-18 confirmed the media path works (offer→answer→WebRTC connected, real audio in, end-of-speech fired, reply produced). The end-to-end test is blocked by a *pre-existing* gap: the constitution-III control-plane WebSocket `WS /satellite/ws` (port 8643) was never implemented — only REST management exists; `GET /satellite/ws` → HTTP 405 → client reconnect-thrash. Needs a separate fix-forward feature (006-class), mirroring feature 004's `build_signaling_app` pattern. T015–T017/T020 cannot pass until then.
  - The end-to-end live spoken test finally completes (Priority: P2)
 
@@ -110,7 +112,7 @@ regression
 spoken exchange yields an intelligible agent reply within a conversational
 delay, with provider parity.
 
-- [ ] T015 [US4] `ssh -N -L 8643:localhost:8643 -L 8644:localhost:8644 hermes`; from `clients/electron-test` (`npm start`), push-to-talk a phrase → offer succeeds (no "not implemented"), gateway transcribes it, agent reply plays **audibly** (US1 / FR-007 / SC-005); reply onset ≤1.5 s (SC-003); transcription parity + intelligible reply (SC-001/SC-002)
+- [X] T015 [US4] `ssh -N -L 8643:localhost:8643 -L 8644:localhost:8644 hermes`; from `clients/electron-test` (`npm start`), push-to-talk a phrase → offer succeeds (no "not implemented"), gateway transcribes it, agent reply plays **audibly** (US1 / FR-007 / SC-005); reply onset ≤1.5 s (SC-003); transcription parity + intelligible reply (SC-001/SC-002)
 - [ ] T016 [US4] Live barge-in: talk over a playing reply → playback stops ≤300 ms and the interruption becomes the next turn; response addresses it (US2 / SC-004)
 - [ ] T017 [US4] Hold ≥3 alternating turns — audio intact both ways, no progressive desync/dropout (SC-006); then drop the call and re-offer → audio re-establishes with NO gateway restart (FR-006)
 
