@@ -61,6 +61,21 @@ postverify(){
   else
     echo "FAIL: a pre-existing platform disappeared"; return 1
   fi
+  # feature 004 / SC-001: BOTH planes must be listening — the control-up /
+  # signaling-down state must never pass a deploy again. Brief retry: the
+  # gateway binds shortly after restart.
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    LP="$(ssh_h "ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null" \
+          | grep -Eo ':(8643|8644)' | sort -u | tr -d ':' | tr '\n' ' ')"
+    [ "$LP" = "8643 8644 " ] && break
+    sleep 2
+  done
+  if [ "$LP" = "8643 8644 " ]; then
+    echo "OK: control(8643) AND signaling(8644) both LISTENING (SC-001)"
+  else
+    echo "FAIL: both planes not listening — got: [$LP] (feature 004 SC-001/FR-005)"
+    return 1
+  fi
 }
 
 rollback_hint(){ echo "ROLLBACK REQUIRED — run: deploy/rollback.sh (backup: $(cat "$STATE_DIR/last_backup" 2>/dev/null||echo '??'))"; }

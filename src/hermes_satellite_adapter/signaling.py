@@ -112,3 +112,36 @@ async def aiortc_transport_factory(offer_sdp: str, device_id: str):  # pragma: n
     raise NotImplementedError(
         "aiortc transport adapter is production-only; tests use FakeTransport"
     )
+
+
+def build_signaling_app(service: "SignalingService"):  # pragma: no cover
+    """Thin aiohttp wiring for the WebRTC voice plane (lazy import; production
+    only). Mirrors management.build_management_app (constitution IV — reuse the
+    proven pattern). Routes delegate to the already-tested SignalingService.
+
+    Kept on its OWN aiohttp site / port, never merged with the control plane
+    (constitution III / spec FR-003).
+    """
+    from aiohttp import web  # noqa: WPS433
+
+    app = web.Application()
+
+    async def _offer(req):
+        return web.json_response(await service.handle_offer(await req.json()))
+
+    async def _candidate(req):
+        # Full-gather is the norm on LAN; candidate is the documented fallback.
+        return web.Response(status=204)
+
+    async def _status(req):
+        st = service.status(req.match_info["device_id"])
+        return web.json_response(st) if st else web.Response(status=404)
+
+    app.add_routes(
+        [
+            web.post("/webrtc/offer", _offer),
+            web.post("/webrtc/candidate", _candidate),
+            web.get("/webrtc/status/{device_id}", _status),
+        ]
+    )
+    return app

@@ -50,14 +50,33 @@ class SatelliteWebRTCAdapter:
             return
         from aiohttp import web  # noqa: WPS433
 
-        mgmt = build_management_app(self.management)
-        runner = web.AppRunner(mgmt)
-        await runner.setup()
-        site = web.TCPSite(runner, "0.0.0.0", self.cfg.management_port)
-        await site.start()
-        self._sites.append(runner)
-        # The WebRTC signaling site (:webrtc_port) is wired identically with
-        # /webrtc/offer|candidate|status routes delegating to self.signaling.
+        from .signaling import build_signaling_app
+
+        # 1) Control plane (always-on) on management_port.
+        mgmt_runner = web.AppRunner(build_management_app(self.management))
+        await mgmt_runner.setup()
+        await web.TCPSite(mgmt_runner, "0.0.0.0", self.cfg.management_port).start()
+        self._sites.append(mgmt_runner)
+
+        # 2) WebRTC voice plane on webrtc_port — a SEPARATE site/port
+        #    (constitution III / FR-003). If it fails to bind, tear the
+        #    control plane back down and raise: the adapter must NEVER present
+        #    itself ready in a control-up/signaling-down state (FR-005/SC-005)
+        #    — the exact defect feature 003's live deploy surfaced.
+        try:
+            sig_runner = web.AppRunner(build_signaling_app(self.signaling))
+            await sig_runner.setup()
+            await web.TCPSite(sig_runner, "0.0.0.0", self.cfg.webrtc_port).start()
+            self._sites.append(sig_runner)
+        except Exception as exc:
+            for r in self._sites:
+                await r.cleanup()
+            self._sites.clear()
+            raise RuntimeError(
+                f"satellite_webrtc not ready: signaling site failed to bind "
+                f"on :{self.cfg.webrtc_port} ({exc}). Control plane torn down "
+                f"to avoid a half-up adapter (FR-005)."
+            ) from exc
 
     async def stop(self) -> None:  # pragma: no cover - needs aiohttp
         for runner in self._sites:
