@@ -574,6 +574,16 @@ class HermesV013Bridge:
 
         run_task.add_done_callback(_on_done)
 
+        # Feature 010: stamp the 3 agent/synth instants only this seam sees,
+        # onto the turn (first write wins; no-op if turn is None). Pure
+        # timestamp capture — does not alter 008 streaming / 009 strip /
+        # barge-in behaviour (FR-007).
+        import time as _t  # noqa: WPS433 - host-only seam
+
+        def _lat(name: str) -> None:
+            if turn is not None:
+                turn.lat_instants.setdefault(name, _t.monotonic())
+
         interrupted = False
         try:
             while True:
@@ -583,8 +593,12 @@ class HermesV013Bridge:
                 if kind == "done":
                     units = asm.flush(payload or cumulative[0])
                 else:  # "delta"
+                    if payload:
+                        _lat("agent_first_output")  # first agent text delta
                     cumulative[0] += payload
                     units = asm.push(cumulative[0])
+                if units:
+                    _lat("first_unit_ready")  # first complete speakable unit
                 for unit in units:
                     if not unit or not unit.strip():
                         continue  # never synth an empty/whitespace unit:
@@ -597,6 +611,7 @@ class HermesV013Bridge:
                         raise  # turn-level handling (FR-006/FR-008)
                     except Exception:  # noqa: BLE001 - skip a bad unit (FR-007)
                         continue
+                    _lat("first_audio_synth")  # first unit synthesized
                     yield audio
                 if kind == "done":
                     if turn is not None:

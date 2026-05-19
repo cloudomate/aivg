@@ -73,7 +73,13 @@ postverify(){
 }
 
 main(){
-  for a in "$@"; do [ "$a" = "--yes" ] && ASSUME_YES=1; done
+  for a in "$@"; do
+    [ "$a" = "--yes" ] && ASSUME_YES=1
+    [ "$a" = "--no-tune" ] && NO_TUNE=1   # feature 010: ship instrumentation
+                                           # WITHOUT the faster-defaults step
+                                           # (for capturing a clean un-tuned
+                                           # baseline; still backup-first)
+  done
   preflight
   [ "${1:-}" = "--preflight" ] && exit 0
   confirm "back up config.yaml, install aiortc (if missing), vendor the plugin, add the satellite: block + cli streaming override, and restart the local gateway"
@@ -156,6 +162,31 @@ YAML
     printf '\nstreaming:\n  enabled: true\n  transport: auto\n' >> "$CFG"
     echo "streaming: block appended (enabled:true, transport:auto)"
   fi
+
+  if [ "${NO_TUNE:-0}" = 1 ]; then
+    say "Feature 010: --no-tune → instrumentation only, faster defaults SKIPPED"
+    echo "config latency values left unchanged (un-tuned baseline build)"
+  else
+  say "Feature 010: faster voice-turn defaults (REVERSIBLE via the backup above)"
+  # Latency levers are Hermes CONFIG VALUES (constitution IV / FR-011 — not
+  # adapter-hardcoded). stt.local.model medium->small (big CPU-STT speedup,
+  # fine for short prompts); voice.silence_duration 3.0->1.2 (endpoint fires
+  # ~1.8s sooner; Hermes's OWN silence algorithm, only its exposed value
+  # changes). Idempotent (no-op if already set); operator can override in
+  # config or restore ~/.hermes/$BK to revert latency exactly.
+  if grep -qE '^    model: medium$' "$CFG"; then
+    perl -0pi -e 's/^    model: medium$/    model: small/m' "$CFG"
+    echo "stt.local.model: medium -> small"
+  else
+    echo "stt.local.model already tuned (skip)"
+  fi
+  if grep -qE '^  silence_duration: 3\.0$' "$CFG"; then
+    perl -0pi -e 's/^  silence_duration: 3\.0$/  silence_duration: 1.2/m' "$CFG"
+    echo "voice.silence_duration: 3.0 -> 1.2"
+  else
+    echo "voice.silence_duration already tuned (skip)"
+  fi
+  fi  # end NO_TUNE gate
 
   say "Restart local gateway"
   hermes gateway restart || hermes gateway start || hermes gateway status \

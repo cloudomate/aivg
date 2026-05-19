@@ -27,6 +27,7 @@ from .hermes_bridge import (
     SessionCtx,
 )
 from .logsink import LogSink
+from .turnlatency import build_breakdown
 from .models import (
     ConversationTurn,
     LogLevel,
@@ -38,6 +39,32 @@ from .models import (
 
 # Barge-in budget (SC-003): playback must stop within this window.
 BARGE_IN_DEADLINE_S = 0.3
+
+
+# Feature 010 — instrumentation verbosity is a CONFIG knob (constitution
+# IV / FR-011/FR-012): the existing `satellite:` block's
+# `default_config.latency_log` ∈ {full, summary, off}, default "summary"
+# (always-on lightweight). Read once via the EXISTING loader — no new
+# config file/loader, no hardcoded mode. Unreadable config (e.g. the
+# fake-transport test env) → safe default, never raises.
+_LAT_MODE_CACHE: "Optional[str]" = None
+
+
+def _latency_log_mode() -> str:
+    global _LAT_MODE_CACHE
+    if _LAT_MODE_CACHE is None:
+        mode = "summary"
+        try:
+            from .config import load_adapter_config
+
+            dc = load_adapter_config().default_config or {}
+            m = str(dc.get("latency_log", "summary")).strip().lower()
+            if m in ("full", "summary", "off"):
+                mode = m
+        except Exception:  # noqa: BLE001 - never let config break the turn
+            mode = "summary"
+        _LAT_MODE_CACHE = mode
+    return _LAT_MODE_CACHE
 
 
 class MediaTransport(Protocol):
@@ -103,6 +130,36 @@ class Session:
     def _log(self, level: LogLevel, source: LogSource, msg: str, **meta) -> None:
         self._sink.emit(self.model.device_id, level, source, msg, meta or None)
 
+    @staticmethod
+    def _stamp(turn: "ConversationTurn", name: str) -> None:
+        """Record a stage instant once (first write wins — idempotent so a
+        retried/duplicated seam never skews the breakdown). FR-007: pure
+        timestamp capture, no behaviour/content change."""
+        turn.lat_instants.setdefault(name, time.monotonic())
+
+    def _emit_latency(self, turn: "ConversationTurn") -> None:
+        """Feature 010: emit ONE consolidated per-turn latency breakdown via
+        the existing LogSink (FR-001/FR-002). Always called on turn end
+        (success/error/barge-in/empty); tolerant of missing instants
+        (FR-008). Verbosity from the config knob; never raises."""
+        mode = _latency_log_mode()
+        if mode == "off":
+            return
+        try:
+            b = build_breakdown(turn.lat_instants)
+            if not b.stages:
+                return  # nothing measured (e.g. failed before endpoint)
+            fields = b.as_log_fields()
+            if mode == "summary":
+                fields = {
+                    k: fields[k]
+                    for k in ("total_ms", "dominant", "complete")
+                    if k in fields
+                }
+            self._log(LogLevel.INFO, LogSource.SYSTEM, "turn latency", **fields)
+        except Exception:  # noqa: BLE001 - instrumentation must never break a turn
+            pass
+
     def _set_state(self, state: SessionState) -> None:
         self.model.state = state
         self.model.touch()
@@ -157,11 +214,23 @@ class Session:
             turn_id=uuid.uuid4().hex, session_id=self.model.session_id
         )
         self.model.current_turn = turn
+        # Feature 010: the endpoint was detected the instant
+        # _collect_utterance returned this utterance. end_of_speech is
+        # silence_duration earlier — that value is INHERITED from Hermes
+        # config via the bridge's silence rule (FR-011: not hardcoded
+        # here); if the bridge does not expose it (fake), omit it and the
+        # breakdown simply starts at endpoint_detected (FR-008).
+        _ep = time.monotonic()
+        turn.lat_instants["endpoint_detected"] = _ep
+        _sil = getattr(self._bridge, "_silence_secs", None)
+        if isinstance(_sil, (int, float)) and _sil >= 0:
+            turn.lat_instants["end_of_speech"] = _ep - float(_sil)
         try:
             self._set_state(SessionState.THINKING)
             turn.user_text = await self._bridge.stt_transcribe(
                 b"".join(utterance), ctx=self._ctx
             )
+            self._stamp(turn, "stt_done")
             self._log(LogLevel.INFO, LogSource.ASR, "transcribed", text=turn.user_text)
             self._ui("partial_transcript", text=turn.user_text)
 
@@ -212,6 +281,7 @@ class Session:
                 outcome=turn.outcome.value if turn.outcome else None,
                 latency_ms=turn.latency_ms,
             )
+            self._emit_latency(turn)  # feature 010 — one breakdown per turn
             self.model.current_turn = None
             self._set_state(SessionState.LISTENING)
 
@@ -236,6 +306,7 @@ class Session:
                 if not spoke:
                     self._set_state(SessionState.SPEAKING)
                     spoke = True
+                    self._stamp(turn, "first_audio_delivered")  # feature 010
                 await self._transport.send_audio(audio)
             return  # empty / tool-only → never entered SPEAKING; to listening
 
@@ -248,7 +319,11 @@ class Session:
         # Each send_audio blocks until that unit has drained (feature 005),
         # so the barge-in watcher stays live across the whole streamed reply
         # and cancelling this task abandons not-yet-played/synthesized units.
+        _spoke_006 = False
         async for audio in _reply_audio(self._bridge, reply.text, self._ctx):
+            if not _spoke_006:
+                _spoke_006 = True
+                self._stamp(turn, "first_audio_delivered")  # feature 010
             await self._transport.send_audio(audio)
 
     async def _watch_for_bargein(self) -> bytes:

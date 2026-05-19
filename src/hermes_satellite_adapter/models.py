@@ -104,6 +104,11 @@ class ConversationTurn:
     outcome: Optional[TurnOutcome] = None
     started_at: float = field(default_factory=time.time)
     ended_at: Optional[float] = None
+    # Feature 010: per-stage monotonic instants (seconds) for the
+    # voice-turn latency breakdown — keys per turnlatency.INSTANTS.
+    # Filled by session.py + hermes_bridge.agent_stream; consumed once on
+    # turn completion. Absent keys are tolerated (FR-008).
+    lat_instants: dict = field(default_factory=dict)
 
     @property
     def latency_ms(self) -> Optional[float]:
