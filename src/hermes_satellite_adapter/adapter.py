@@ -122,7 +122,7 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
         MessageEvent,
         SendResult,
     )
-    from gateway.session import SessionSource  # type: ignore
+    from gateway.session import SessionSource, build_session_key  # type: ignore
 
     from .hermes_bridge import HermesV013Bridge, SessionCtx
 
@@ -139,7 +139,17 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
                 return await fut
 
             self._satellite_reply_futs: dict = {}
-            self._bridge = HermesV013Bridge(agent_runner=_run_agent)
+            # session_id -> SessionSource, so barge-in can rebuild the exact
+            # gateway session_key to interrupt the in-flight agent (T005).
+            self._satellite_sources: dict = {}
+            # Feature 007: feed Hermes's own draft-streaming hook into the
+            # speech pipeline as the agent generates, and let barge-in stop
+            # generation via the gateway's adapter-owned interrupt
+            # (constitution I/IV — we only consume Hermes's hooks).
+            self._bridge = HermesV013Bridge(
+                agent_runner=_run_agent,
+                interrupt_cb=self._satellite_request_interrupt,
+            )
             self._impl = SatelliteWebRTCAdapter(bridge=self._bridge)
 
         def _make_event(self, text: str, ctx: SessionCtx):
@@ -149,7 +159,53 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
                 user_id=ctx.device_id,
                 chat_type="dm",
             )
+            self._satellite_sources[ctx.session_id] = source
             return MessageEvent(text=text, source=source)
+
+        # --- Feature 007: end-to-end streaming consumption --------------
+        def supports_draft_streaming(self, chat_type=None, metadata=None) -> bool:
+            # Opt into Hermes's native draft-streaming hook so the reply is
+            # received incrementally AS the agent composes it (verified
+            # base.py:1336 — default False; consumers fall back to the
+            # edit/send path when False or send_draft raises). FR-001/FR-002.
+            return True
+
+        async def send_draft(self, chat_id, draft_id, content, metadata=None):
+            # Verified base.py:1355 / stream_consumer.py:877 — `content` is
+            # the CUMULATIVE accumulated draft text, called repeatedly with
+            # growing text mid-generation. Feed it to the per-session
+            # IncrementalUnitAssembler; completed units drive feature 006's
+            # per-unit Hermes TTS + transport playback as they arrive.
+            self._bridge.feed_draft(chat_id, content)
+            return SendResult(success=True, message_id=None)
+
+        def _satellite_request_interrupt(self, session_id) -> None:
+            # Barge-in: stop the in-flight agent generation (FR-004/SC-004).
+            # Uses the adapter-owned interrupt entrypoint
+            # (base.py:2309 interrupt_session_activity) keyed by the SAME
+            # session_key the gateway built for this turn — no agent
+            # cancellation is reimplemented here (constitution I).
+            source = self._satellite_sources.get(session_id)
+            if source is None:
+                return
+            try:
+                session_key = build_session_key(
+                    source,
+                    group_sessions_per_user=self.config.extra.get(
+                        "group_sessions_per_user", True
+                    ),
+                    thread_sessions_per_user=self.config.extra.get(
+                        "thread_sessions_per_user", False
+                    ),
+                )
+            except Exception:
+                return
+            try:
+                asyncio.get_event_loop().create_task(
+                    self.interrupt_session_activity(session_key, session_id)
+                )
+            except Exception:
+                pass  # interrupt is best-effort; next-turn dispatch also interrupts
 
         # BasePlatformAdapter.__abstractmethods__ (v0.13.0) =
         #   {connect, disconnect, get_chat_info, send} — all implemented.
@@ -168,9 +224,17 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             # Hermes calls send(chat_id=, content=, reply_to=, metadata=) and
             # consumes a SendResult (gateway/platforms/base.py:2485). Verified
             # against hermes-agent v0.13.0 (telegram adapter parity).
+            #
+            # Drafts have no message_id and deliberately do NOT set
+            # `already_sent` (stream_consumer.py:1126), so the gateway still
+            # calls this final send() with the full reply. It is BOTH the
+            # streamed-reply finalize (flush the assembler's buffered tail)
+            # AND the FR-005 non-streaming fallback (no draft frame was seen
+            # → flush() segments the whole reply == feature 006).
+            self._bridge.feed_final(chat_id, content)
             fut = self._satellite_reply_futs.pop(chat_id, None)
             if fut and not fut.done():
-                fut.set_result(content)  # hand the agent reply to the bridge
+                fut.set_result(content)  # agent_turn() fallback path
             return SendResult(success=True, message_id=None)
 
     return PlatformEntry(

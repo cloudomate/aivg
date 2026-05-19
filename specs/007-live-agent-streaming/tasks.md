@@ -33,7 +33,7 @@ T017).
 
 ## Phase 1: Setup
 
-- [ ] T001 Baseline: run `.venv/bin/python -m pytest -q` and record feature 001's fake-transport suite is green (regression baseline for FR-009/SC-007)
+- [x] T001 Baseline: run `.venv/bin/python -m pytest -q` and record feature 001's fake-transport suite is green (regression baseline for FR-009/SC-007)
 
 ---
 
@@ -43,12 +43,12 @@ T017).
 
 **⚠️ CRITICAL**: Blocks US1, US2, US3
 
-- [ ] T002 Host-API verification (read-only, constitution V): from the running host `~/.hermes/hermes-agent/gateway/platforms/base.py` capture the EXACT `supports_draft_streaming` partner draft-update method name/signature + `edit_message(..., finalize=)` signature, the Hermes interrupt entrypoint for an in-flight turn, AND the existing turn-level error/failure surface for a mid-turn agent/TTS exception (resolves research D1/D3 residuals + the H6 reuse path before coding); record findings in `specs/007-live-agent-streaming/research.md` "Residual" section — same discipline as features 003/005
-- [ ] T003 [P] Create `src/hermes_satellite_adapter/streamasm.py` (stdlib only): `IncrementalUnitAssembler` with `push(draft: str) -> list[str]` (emit only newly-complete speakable units via `textseg.iter_sentences` on the stable prefix; cumulative input never re-emits; **already-emitted prefix is immutable — a later shorter/divergent draft never un-says or re-emits an already-returned unit (spec edge "agent revises/retracts emitted text"; U1)**; buffer the incomplete tail) and `flush() -> list[str]` (remainder; idempotent; empty → []); preserve order, lose no finalized non-whitespace text; pure/deterministic, NO engine (constitution I) — data-model.md, contracts A1–A5
-- [ ] T004 Modify `src/hermes_satellite_adapter/adapter.py` `_SatellitePlatformAdapter` (host-only, pragma: no cover) per T002 findings: `supports_draft_streaming() -> True`; implement the draft-update + `edit_message(..., finalize=True)` partner method to feed each update to an `IncrementalUnitAssembler`; completed units drive the EXISTING feature-006 per-unit Hermes TTS + transport playback; on finalize/done flush remaining; if the hook is not exercised for a turn, resolve the reply exactly as feature 006 (FR-005) — contracts H1–H3/H5/H7
-- [ ] T005 Extend barge-in (adapter/session seam) so an interruption ALSO triggers the Hermes interrupt for the in-flight turn (per T002 entrypoint) in addition to feature 006's stop_playback + pipeline cancel — no orphan unit AND no orphan agent generation (contracts H4, research D3, FR-004)
-- [ ] T006 Mid-stream-failure path (C1, contract H6 / FR-008 / spec edge "agent or speech provider fails mid-stream"): confirm/wire that an agent or TTS exception raised *after* streaming has begun propagates through the EXISTING feature-006 turn-level failure handling (perceptible turn failure, session returns to listening, no broken/zero-length audio, no hang) and does NOT leave the assembler, an in-flight unit, or agent generation orphaned — reuse Hermes's turn error surface (T002), add no new engine/handler (constitution I/IV); `adapter.py`/`session.py` glue only
-- [ ] T007 Confirm scope: `signaling.py`/`AiortcTransport`, `media.py`, `textseg.py`, `management.py`, the feature-001/005/006 contracts, and `deploy/*` are behaviourally unchanged; only `streamasm.py` (new), `adapter.py`, and minimal `hermes_bridge.py`/`session.py` glue touched; fake/non-streaming path == feature 006 (FR-009)
+- [x] T002 Host-API verification (read-only, constitution V): from the running host `~/.hermes/hermes-agent/gateway/platforms/base.py` capture the EXACT `supports_draft_streaming` partner draft-update method name/signature + `edit_message(..., finalize=)` signature, the Hermes interrupt entrypoint for an in-flight turn, AND the existing turn-level error/failure surface for a mid-turn agent/TTS exception (resolves research D1/D3 residuals + the H6 reuse path before coding); record findings in `specs/007-live-agent-streaming/research.md` "Residual" section — same discipline as features 003/005
+- [x] T003 [P] Create `src/hermes_satellite_adapter/streamasm.py` (stdlib only): `IncrementalUnitAssembler` with `push(draft: str) -> list[str]` (emit only newly-complete speakable units via `textseg.iter_sentences` on the stable prefix; cumulative input never re-emits; **already-emitted prefix is immutable — a later shorter/divergent draft never un-says or re-emits an already-returned unit (spec edge "agent revises/retracts emitted text"; U1)**; buffer the incomplete tail) and `flush() -> list[str]` (remainder; idempotent; empty → []); preserve order, lose no finalized non-whitespace text; pure/deterministic, NO engine (constitution I) — data-model.md, contracts A1–A5
+- [x] T004 Modify `src/hermes_satellite_adapter/adapter.py` `_SatellitePlatformAdapter` (host-only, pragma: no cover) per T002 findings: `supports_draft_streaming() -> True`; implement the draft-update + `edit_message(..., finalize=True)` partner method to feed each update to an `IncrementalUnitAssembler`; completed units drive the EXISTING feature-006 per-unit Hermes TTS + transport playback; on finalize/done flush remaining; if the hook is not exercised for a turn, resolve the reply exactly as feature 006 (FR-005) — contracts H1–H3/H5/H7
+- [x] T005 Extend barge-in (adapter/session seam) so an interruption ALSO triggers the Hermes interrupt for the in-flight turn (per T002 entrypoint) in addition to feature 006's stop_playback + pipeline cancel — no orphan unit AND no orphan agent generation (contracts H4, research D3, FR-004)
+- [x] T006 Mid-stream-failure path (C1, contract H6 / FR-008 / spec edge "agent or speech provider fails mid-stream"): confirm/wire that an agent or TTS exception raised *after* streaming has begun propagates through the EXISTING feature-006 turn-level failure handling (perceptible turn failure, session returns to listening, no broken/zero-length audio, no hang) and does NOT leave the assembler, an in-flight unit, or agent generation orphaned — reuse Hermes's turn error surface (T002), add no new engine/handler (constitution I/IV); `adapter.py`/`session.py` glue only
+- [x] T007 Confirm scope: `signaling.py`/`AiortcTransport`, `media.py`, `textseg.py`, `management.py`, the feature-001/005/006 contracts, and `deploy/*` are behaviourally unchanged; only `streamasm.py` (new), `adapter.py`, and minimal `hermes_bridge.py`/`session.py` glue touched; fake/non-streaming path == feature 006 (FR-009)
 
 **Checkpoint**: Host API pinned (incl. mid-turn error surface); streaming-
 consumption + failure path exist; fake path still feature-006-identical;
@@ -64,9 +64,9 @@ for full composition; later units continue as the agent produces them.
 **Independent Test**: `test_streamasm.py` green + feature 001 fake suite still
 green (no edits); cadence host-proven in Phase 6.
 
-- [ ] T008 [P] [US1] New `tests/unit/test_streamasm.py`: cumulative drafts emit each complete unit once (no dup); partial trailing sentence buffered (no half-sentence); `flush()` returns remainder and is idempotent; append/delta input equivalent to cumulative; **a later shorter/divergent draft never un-says or re-emits an already-returned unit (immutable-prefix / retraction case — U1)**; concatenated units+flush loses no finalized non-whitespace text and preserves order; empty/whitespace → [] (contracts A1–A5 / FR-001/FR-003)
-- [ ] T009 [US1] Run full `.venv/bin/python -m pytest -q`: new `test_streamasm.py` passes AND feature 001's fake-transport suite still 100% green WITHOUT test edits (FR-005 fallback keeps the fake/non-streaming path == feature 006 — FR-009 / SC-007)
-- [ ] T010 [US1] Static self-review vs contracts H1–H3/H6/H7 + constitution I/IV: the adapter only consumes Hermes's own draft-streaming hook + reuses feature 006's segmentation/TTS/transport; mid-stream failure uses Hermes's existing turn error surface (no new handler); no agent/STT/TTS engine embedded; `MediaTransport` contract + turn-state semantics untouched
+- [x] T008 [P] [US1] New `tests/unit/test_streamasm.py`: cumulative drafts emit each complete unit once (no dup); partial trailing sentence buffered (no half-sentence); `flush()` returns remainder and is idempotent; append/delta input equivalent to cumulative; **a later shorter/divergent draft never un-says or re-emits an already-returned unit (immutable-prefix / retraction case — U1)**; concatenated units+flush loses no finalized non-whitespace text and preserves order; empty/whitespace → [] (contracts A1–A5 / FR-001/FR-003)
+- [x] T009 [US1] Run full `.venv/bin/python -m pytest -q`: new `test_streamasm.py` passes AND feature 001's fake-transport suite still 100% green WITHOUT test edits (FR-005 fallback keeps the fake/non-streaming path == feature 006 — FR-009 / SC-007)
+- [x] T010 [US1] Static self-review vs contracts H1–H3/H6/H7 + constitution I/IV: the adapter only consumes Hermes's own draft-streaming hook + reuses feature 006's segmentation/TTS/transport; mid-stream failure uses Hermes's existing turn error surface (no new handler); no agent/STT/TTS engine embedded; `MediaTransport` contract + turn-state semantics untouched
 
 **Checkpoint**: MVP — streaming-consumption complete & locally proven where
 provable; cadence host-proof deferred to Phase 6
@@ -81,8 +81,8 @@ not-yet-generated units, AND stops Hermes generating the rest.
 **Independent Test**: cancel+interrupt path reasoned/covered locally; ≤300 ms
 audio stop + ≤1 s generation stop host-proven in Phase 6.
 
-- [ ] T011 [US2] Verify the barge-in path: feature 006 teardown (stop_playback + pipeline cancel → assembler/units abandoned) PLUS the Hermes interrupt (T005) fires for the in-flight turn; confirm no code path (incl. the T006 mid-stream-failure path) can leave agent generation running after an interrupt (contracts H4, research D3, spec edge "barge-in while generating")
-- [ ] T012 [US2] Re-run `.venv/bin/python -m pytest -q`: full suite still green after the interrupt + failure paths are finalized (no regression to unchanged conversation logic — FR-009/SC-007)
+- [x] T011 [US2] Verify the barge-in path: feature 006 teardown (stop_playback + pipeline cancel → assembler/units abandoned) PLUS the Hermes interrupt (T005) fires for the in-flight turn; confirm no code path (incl. the T006 mid-stream-failure path) can leave agent generation running after an interrupt (contracts H4, research D3, spec edge "barge-in while generating")
+- [x] T012 [US2] Re-run `.venv/bin/python -m pytest -q`: full suite still green after the interrupt + failure paths are finalized (no regression to unchanged conversation logic — FR-009/SC-007)
 
 **Checkpoint**: Barge-in cancels playback AND generation; ≤300 ms / ≤1 s
 proven on host in Phase 6
@@ -97,9 +97,9 @@ reversible; zero pre-existing-platform regression.
 **Independent Test**: post-redeploy both ports listen + 5 pre-existing
 platforms intact; rollback restores prior state < 5 min.
 
-- [ ] T013 [US3] Run `deploy/deploy-to-hermes.sh --preflight` (read-only): host reachable, deps present, snapshot pre-existing platforms (reused unchanged, FR-010)
-- [ ] T014 [US3] 🔒 HOST-MUTATING Execute `yes yes | deploy/deploy-to-hermes.sh` (gated, backup-first; features 003/004 path unchanged): rsync the streaming package → ~2-min restart drain → post-verify (no embedded speech engine, plugin import/register, 0 pre-existing platforms removed, both :8643 & :8644 LISTENING)
-- [ ] T015 [US3] Confirm on host: `ss -ltn` shows 8643 AND 8644 LISTEN; `curl /satellite/list` ok; the 5 pre-existing platforms intact (SC-008 / FR-010)
+- [x] T013 [US3] Run `deploy/deploy-to-hermes.sh --preflight` (read-only): host reachable, deps present, snapshot pre-existing platforms (reused unchanged, FR-010)
+- [x] T014 [US3] 🔒 HOST-MUTATING Execute `yes yes | deploy/deploy-to-hermes.sh` (gated, backup-first; features 003/004 path unchanged): rsync the streaming package → ~2-min restart drain → post-verify (no embedded speech engine, plugin import/register, 0 pre-existing platforms removed, both :8643 & :8644 LISTENING)
+- [x] T015 [US3] Confirm on host: `ss -ltn` shows 8643 AND 8644 LISTEN; `curl /satellite/list` ok; the 5 pre-existing platforms intact (SC-008 / FR-010)
 - [ ] T016 [US3] 🔒 HOST-MUTATING Rollback drill: `yes | deploy/rollback.sh`; verify config byte-identical to backup + plugin removed + pre-existing platforms == pre-state < 5 min (SC-008); then redeploy to leave streaming live for Phase 6 (operator-confirmed)
 
 **Checkpoint**: Streaming adapter deployed; reversibility re-proven; zero

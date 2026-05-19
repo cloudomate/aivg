@@ -93,13 +93,56 @@ time against the running host (constitution V), with FR-005 as the safety net.
   Deploy-gate quirk persists: `yes yes | deploy/deploy-to-hermes.sh`.
 - **Rationale**: FR-010 / Assumptions — no new deploy mechanism.
 
-## Residual (resolved at implement time, not blockers)
+## Residual — RESOLVED at implement time (T002, host recon 2026-05-19)
 
-- Exact name/signature of the `supports_draft_streaming` partner update
-  method and the `edit_message` streaming signature on the host
-  `BasePlatformAdapter` — read from the running host `gateway/platforms/
-  base.py` during implementation (same discipline that fixed the
-  `send()`/`Platform`/`MessageEvent` APIs in 003/005).
-- Exact Hermes interrupt entrypoint for an in-flight turn (D3).
-- Whether voice/`Platform.LOCAL` turns are eligible for the draft hook by
-  default or need an opt-in flag; FR-005 fallback covers the negative case.
+Verified against the running host `~/.hermes/hermes-agent/gateway/platforms/
+base.py` + `gateway/stream_consumer.py` + `gateway/run.py` (hermes-agent
+v0.13.0), read-only:
+
+- **Draft-streaming opt-in**: `BasePlatformAdapter.supports_draft_streaming(
+  self, chat_type: Optional[str] = None, metadata: Optional[Dict] = None) ->
+  bool` (base.py:1336), default `False`. `GatewayStreamConsumer._maybe_draft`
+  (stream_consumer.py:860) probes it with `chat_type=cfg.chat_type`.
+- **Partner update method**: `async send_draft(self, chat_id: str,
+  draft_id: int, content: str, metadata=None) -> SendResult`
+  (base.py:1355). `content` is the **cumulative accumulated text** for the
+  current segment ("a single animated draft frame for the current accumulated
+  text", stream_consumer.py:877/`_send_draft_frame`); called repeatedly with
+  growing text mid-stream (route at stream_consumer.py:1112-1131). A no-op
+  skip fires when `content == _last_sent_text` (confirms cumulative).
+- **`edit_message(self, chat_id, message_id, content, *, finalize: bool =
+  False) -> SendResult`** (base.py:1609). `finalize=True` = last edit of a
+  streamed response (set when `got_done` fires). NOT used on the draft path
+  (drafts have no `message_id`); for the satellite the finalize point is the
+  **regular `send()`** — drafts deliberately DO NOT set `already_sent`
+  (stream_consumer.py:1126-1131 comment), so the gateway's final
+  `send(chat_id, content=…)` still fires with the full reply. That `send()`
+  is therefore both the streamed-reply finalize AND the FR-005 non-streaming
+  fallback delivery (single full text, no draft frames seen).
+- **Interrupt entrypoint** (D3 resolved): gateway tracks
+  `self._running_agents[session_key]` (run.py:1238);
+  `running_agent.interrupt(text)` (run.py:2657) aborts in-flight tool calls
+  and exits the agent loop. Default `_busy_input_mode = "interrupt"`
+  (run.py:1186) — dispatching the **next** `MessageEvent` (the barge-in
+  utterance becoming the next turn via `handle_message`) ALREADY calls
+  `running_agent.interrupt()` on the still-running prior agent
+  (run.py:2655-2657). So feature 006's barge-in (next utterance → next turn →
+  `handle_message`) inherently stops the prior agent; T005 makes this
+  explicit/prompt and verifies no orphan generation (FR-004).
+- **Mid-turn error surface** (C1/H6 resolved): a provider failure raises
+  `AllProvidersUnavailable`, which already propagates out of `tts_stream`
+  and is caught in `session._handle_turn` → `TurnOutcome.FAILED` +
+  `_notify_failure()` + return to LISTENING — the existing perceptible
+  turn-failure path, reused unchanged (no new handler; constitution I/IV).
+- **Voice/`Platform.LOCAL` eligibility**: the draft path is gated only by
+  `supports_draft_streaming` + transport mode (`auto`/`draft`), not by
+  platform; opting in is sufficient. FR-005 fallback covers any turn where
+  no `send_draft` frame is seen (single final `send()` only).
+
+Integration shape chosen: `_SatellitePlatformAdapter.supports_draft_streaming
+-> True`; `send_draft` feeds cumulative `content` to a per-session
+`IncrementalUnitAssembler`; complete units drive feature 006's per-unit
+Hermes TTS + transport playback as they arrive; the final `send()` flushes
+the assembler (streamed turn) OR, if no draft frame was seen, resolves the
+reply exactly as feature 006 (FR-005). The fake bridge exposes no streaming
+seam → byte-identical 006 path (SC-007).

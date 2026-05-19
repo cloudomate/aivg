@@ -152,13 +152,22 @@ class HermesV013Bridge:
         self,
         agent_runner: "Callable[[str, SessionCtx], Awaitable[str]] | None" = None,
         *,
+        interrupt_cb: "Callable[[str], None] | None" = None,
         frame_seconds: float = 0.02,
         pcm_sample_rate: int = 48000,
     ) -> None:
         self._agent_runner = agent_runner
+        # Feature 007: called on barge-in to stop the in-flight Hermes agent
+        # (the adapter routes it to interrupt_session_activity). Constitution
+        # I — we trigger Hermes's own interrupt, we don't cancel the agent.
+        self._interrupt_cb = interrupt_cb
         self._frame_seconds = frame_seconds
         self._sr = pcm_sample_rate
         self._ep: dict[str, _EndpointState] = {}
+        # session_id -> (IncrementalUnitAssembler, asyncio.Queue) for the
+        # in-flight streamed reply. Populated by agent_stream(), fed by the
+        # adapter's send_draft()/send() hooks.
+        self._stream_chans: dict = {}
         self._rms_threshold, self._silence_secs = self._load_silence_rule()
 
     @staticmethod
@@ -325,5 +334,133 @@ class HermesV013Bridge:
             prod.cancel()
             try:
                 await prod
+            except BaseException:  # noqa: BLE001 - teardown must not leak
+                pass
+
+    # -----------------------------------------------------------------
+    # Feature 007 — end-to-end streaming: consume Hermes's own
+    # draft-streaming hook (adapter.send_draft/send) and speak the answer
+    # WHILE the agent is still composing it. Host-only (the adapter wiring
+    # + real agent streaming are constitution-V host-proven); the fake
+    # bridge has none of this, so the fake suite takes the unchanged
+    # feature-006 path verbatim (FR-005 / SC-007).
+    # -----------------------------------------------------------------
+
+    _STREAM_DONE = object()
+
+    def feed_draft(self, session_id: str, content: str) -> None:  # pragma: no cover
+        """Adapter ``send_draft`` hook: ``content`` is the cumulative draft so
+        far. Emit any newly-complete speakable units onto the session queue
+        (assembler buffers an incomplete trailing sentence — FR-003)."""
+        chan = self._stream_chans.get(session_id)
+        if chan is None:
+            return  # no active stream consumer for this session
+        asm, q, saw = chan
+        saw[0] = True
+        for unit in asm.push(content):
+            q.put_nowait(unit)
+
+    def feed_final(self, session_id: str, content: str) -> None:  # pragma: no cover
+        """Adapter final ``send`` hook: flush the assembler (the buffered
+        tail, or — if no draft frame was ever seen — the WHOLE reply, which
+        is exactly feature 006), then signal completion. Idempotent flush
+        makes a duplicate finalize a no-op (A4)."""
+        chan = self._stream_chans.get(session_id)
+        if chan is None:
+            return
+        asm, q, _saw = chan
+        for unit in asm.flush(content):
+            q.put_nowait(unit)
+        q.put_nowait(self._STREAM_DONE)
+
+    async def agent_stream(self, user_text: str, *, ctx: SessionCtx, turn=None):  # pragma: no cover
+        """Yield reply audio AS the agent generates it.
+
+        Starts the gateway agent (same ``handle_message`` path as feature
+        006); meanwhile consumes speakable units the adapter's
+        ``send_draft``/``send`` hooks push through the per-session assembler,
+        synthesising each via the EXISTING Hermes ``tts_synthesize`` and
+        yielding audio in order. The consumer (``session._respond``) plays
+        one unit at a time, so later units synthesise while earlier ones
+        play (FR-001/FR-002, SC-001/SC-002).
+
+        - empty / tool-only reply → yields nothing (return to listening)
+        - a unit whose synth raises a generic error is skipped (FR-007)
+        - ``AllProvidersUnavailable`` (or an agent failure) propagates so the
+          existing turn-level handling fires — perceptible failure, not a
+          hang (FR-008 / contract H6)
+        - on consumer close/cancel (barge-in) the agent is interrupted via
+          Hermes's own interrupt and the channel torn down — no orphan unit
+          AND no orphan generation (FR-004 / SC-004)
+        - if no draft frame is ever seen, the final ``send`` flushes the
+          whole reply → identical to feature 006 (FR-005)
+        """
+        import asyncio
+
+        from .streamasm import IncrementalUnitAssembler  # noqa: WPS433
+
+        if self._agent_runner is None:
+            raise NotImplementedError(
+                "agent_runner not injected: adapter.register must wire the "
+                "gateway BasePlatformAdapter.handle_message path (VG-3/D16)."
+            )
+        if not user_text.strip():
+            return  # empty input → empty / tool-only turn
+
+        sid = ctx.session_id
+        q: "asyncio.Queue" = asyncio.Queue()
+        saw = [False]
+        self._stream_chans[sid] = (IncrementalUnitAssembler(), q, saw)
+
+        agent_task = asyncio.create_task(self._agent_runner(user_text, ctx))
+
+        def _on_agent_done(t: "asyncio.Task") -> None:
+            # If the agent finished/failed WITHOUT a final send() (e.g. an
+            # exception before delivery), unblock the consumer so the turn
+            # fails perceptibly instead of hanging (FR-008 / H6).
+            exc = None
+            try:
+                exc = t.exception()
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                exc = None
+            q.put_nowait(exc if exc is not None else self._STREAM_DONE)
+
+        agent_task.add_done_callback(_on_agent_done)
+
+        interrupted = False
+        try:
+            while True:
+                item = await q.get()
+                if item is self._STREAM_DONE:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                try:
+                    audio = await self.tts_synthesize(item, ctx=ctx)
+                except AllProvidersUnavailable:
+                    raise  # turn-level handling (FR-006/FR-008)
+                except Exception:  # noqa: BLE001 - skip a bad unit (FR-007)
+                    continue
+                yield audio
+            if turn is not None and agent_task.done() and not agent_task.cancelled():
+                exc = agent_task.exception()
+                if exc is None:
+                    turn.agent_text = (agent_task.result() or "")
+        except (asyncio.CancelledError, GeneratorExit):
+            interrupted = True
+            raise
+        finally:
+            self._stream_chans.pop(sid, None)
+            if not agent_task.done():
+                # Barge-in / failure with the agent still running: stop
+                # Hermes's generation (no orphan), THEN drop our task.
+                if interrupted and self._interrupt_cb is not None:
+                    try:
+                        self._interrupt_cb(sid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                agent_task.cancel()
+            try:
+                await agent_task
             except BaseException:  # noqa: BLE001 - teardown must not leak
                 pass

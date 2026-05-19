@@ -216,6 +216,29 @@ class Session:
             self._set_state(SessionState.LISTENING)
 
     async def _respond(self, turn: ConversationTurn) -> None:
+        # Feature 007: if the bridge can stream the answer AS the agent
+        # composes it (``agent_stream`` — the real Hermes bridge consuming
+        # Hermes's own draft-streaming hook), speak each sentence the moment
+        # it is final, while the agent is still generating the rest
+        # (FR-001/FR-002). SPEAKING is entered on the FIRST unit, not after
+        # the whole reply. The fake bridge has no ``agent_stream`` → the
+        # feature-006 path below runs verbatim, so the fake-transport suite
+        # is byte-identical (FR-005 / FR-009 / SC-007).
+        streamer = getattr(self._bridge, "agent_stream", None)
+        if streamer is not None:
+            spoke = False
+            # Each send_audio blocks until that unit has drained (feature
+            # 005), so the barge-in watcher stays live for the whole reply;
+            # cancelling this task tears down agent_stream, which abandons
+            # not-yet-played/synthesised units AND interrupts the still-
+            # running agent (FR-004).
+            async for audio in streamer(turn.user_text, ctx=self._ctx, turn=turn):
+                if not spoke:
+                    self._set_state(SessionState.SPEAKING)
+                    spoke = True
+                await self._transport.send_audio(audio)
+            return  # empty / tool-only → never entered SPEAKING; to listening
+
         reply: AgentReply = await self._bridge.agent_turn(turn.user_text, ctx=self._ctx)
         turn.agent_text = reply.text
         if reply.is_empty or not reply.text:
