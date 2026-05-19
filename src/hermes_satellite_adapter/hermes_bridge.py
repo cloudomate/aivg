@@ -353,6 +353,11 @@ class HermesV013Bridge:
         far. Emit any newly-complete speakable units onto the session queue
         (assembler buffers an incomplete trailing sentence — FR-003)."""
         chan = self._stream_chans.get(session_id)
+        import logging as _lg
+        _lg.getLogger("satellite.f007").info(
+            "F007 feed_draft sid=%s chan=%s len=%d",
+            session_id, chan is not None, len(content or ""),
+        )
         if chan is None:
             return  # no active stream consumer for this session
         asm, q, saw = chan
@@ -366,6 +371,12 @@ class HermesV013Bridge:
         is exactly feature 006), then signal completion. Idempotent flush
         makes a duplicate finalize a no-op (A4)."""
         chan = self._stream_chans.get(session_id)
+        import logging as _lg
+        _lg.getLogger("satellite.f007").info(
+            "F007 feed_final sid=%s chan=%s len=%d saw_draft=%s",
+            session_id, chan is not None, len(content or ""),
+            (chan[2][0] if chan else None),
+        )
         if chan is None:
             return
         asm, q, _saw = chan
@@ -408,6 +419,10 @@ class HermesV013Bridge:
             return  # empty input → empty / tool-only turn
 
         sid = ctx.session_id
+        import logging as _lg
+        _lg.getLogger("satellite.f007").info(
+            "F007 agent_stream ENTER sid=%s text=%r", sid, user_text[:60]
+        )
         q: "asyncio.Queue" = asyncio.Queue()
         saw = [False]
         self._stream_chans[sid] = (IncrementalUnitAssembler(), q, saw)

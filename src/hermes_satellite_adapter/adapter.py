@@ -9,8 +9,12 @@ Hermes platform-adapter base is verification gate VG-4 (research.md / T039).
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Optional
+
+# Feature-007 diagnostic logger (INFO so visible without gateway DEBUG).
+_F007 = logging.getLogger("satellite.f007")
 
 from .config import SatelliteAdapterConfig, load_adapter_config
 from .hermes_bridge import HermesBridge, UnboundHermesBridge
@@ -168,6 +172,7 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             # received incrementally AS the agent composes it (verified
             # base.py:1336 — default False; consumers fall back to the
             # edit/send path when False or send_draft raises). FR-001/FR-002.
+            _F007.info("F007 supports_draft_streaming PROBED chat_type=%r -> True", chat_type)
             return True
 
         async def send_draft(self, chat_id, draft_id, content, metadata=None):
@@ -176,6 +181,10 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             # growing text mid-generation. Feed it to the per-session
             # IncrementalUnitAssembler; completed units drive feature 006's
             # per-unit Hermes TTS + transport playback as they arrive.
+            _F007.info(
+                "F007 send_draft CALLED chat_id=%s draft_id=%s len=%d",
+                chat_id, draft_id, len(content or ""),
+            )
             self._bridge.feed_draft(chat_id, content)
             return SendResult(success=True, message_id=None)
 
@@ -231,6 +240,9 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             # streamed-reply finalize (flush the assembler's buffered tail)
             # AND the FR-005 non-streaming fallback (no draft frame was seen
             # → flush() segments the whole reply == feature 006).
+            _F007.info(
+                "F007 send (FINAL) chat_id=%s len=%d", chat_id, len(content or "")
+            )
             self._bridge.feed_final(chat_id, content)
             fut = self._satellite_reply_futs.pop(chat_id, None)
             if fut and not fut.done():

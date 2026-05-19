@@ -123,9 +123,10 @@ YAML
     echo "satellite: block already present (skip)"
   fi
 
-  say "Enable gateway streaming for the satellite only (display.platforms.cli)"
-  # User-approved scope: per-platform override (resolve_display_setting step 1)
-  # — global streaming + the 5 other platforms stay untouched.
+  say "Enable gateway streaming for the satellite (display.platforms.cli)"
+  # Per-platform enable gate (resolve_display_setting step 1). Necessary but
+  # NOT sufficient on its own — the draft-vs-edit TRANSPORT is global-only
+  # (see next step). Kept for clarity/robustness.
   if grep -qE '^  platforms: \{\}$' "$CFG"; then
     perl -0pi -e 's/^  platforms: \{\}$/  platforms:\n    cli:\n      streaming: true/m' "$CFG"
     echo "display.platforms.cli.streaming: true set"
@@ -134,6 +135,26 @@ YAML
   else
     echo "WARN: display.platforms not empty and cli override absent — set it manually:"
     echo "      display.platforms.cli.streaming: true"
+  fi
+
+  say "Set top-level streaming block (enabled:true, transport:auto)"
+  # The native-draft-vs-edit selector is governed ONLY by the global
+  # streaming.transport (StreamingConfig default is transport:"edit", which
+  # disables send_draft). Without transport:auto the consumer streams via
+  # edit_message — which our adapter does not consume incrementally — so the
+  # turn falls back to feature-006. Rewrite the whole streaming: block
+  # deterministically (idempotent; local dev box — other platforms dormant).
+  awk '
+    /^streaming:[[:space:]]*$/ { print; print "  enabled: true"; print "  transport: auto"; instream=1; next }
+    instream && /^[^[:space:]#]/ { instream=0 }
+    instream { next }
+    { print }
+  ' "$CFG" > "$CFG.f007tmp" && mv "$CFG.f007tmp" "$CFG"
+  if grep -qE '^streaming:' "$CFG"; then
+    echo "streaming: { enabled: true, transport: auto } set"
+  else
+    printf '\nstreaming:\n  enabled: true\n  transport: auto\n' >> "$CFG"
+    echo "streaming: block appended (enabled:true, transport:auto)"
   fi
 
   say "Restart local gateway"
