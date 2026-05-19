@@ -267,3 +267,63 @@ class HermesV013Bridge:
                 return fh.read()
 
         return await asyncio.to_thread(_work)
+
+    async def tts_stream(self, text: str, *, ctx: SessionCtx):
+        """Feature 006: speak the reply sentence-by-sentence.
+
+        Segments the COMPLETED reply (textseg — pure text orchestration, no
+        engine; constitution I) and pipelines per-unit synthesis through the
+        EXISTING ``tts_synthesize`` (same Hermes provider/voice; FR-005) into
+        a bounded look-ahead queue, yielding audio in order. The consumer
+        (``session._respond``) plays one unit at a time, so later units are
+        synthesized while earlier ones play (FR-003 / SC-001/002).
+
+        - a unit whose synthesis raises a generic error is skipped, the rest
+          continues (FR-007)
+        - ``AllProvidersUnavailable`` propagates so the turn-level handling
+          fires unchanged (FR-006)
+        - on consumer close/cancel (barge-in) the producer is cancelled and
+          the queue drained — no further unit is synthesized or spoken
+          (FR-004 / SC-003)
+        """
+        import asyncio
+
+        from .textseg import iter_sentences  # noqa: WPS433
+
+        units = iter_sentences(text)
+        if not units:
+            return  # empty / tool-only → nothing spoken (FR-006)
+
+        q: "asyncio.Queue" = asyncio.Queue(maxsize=2)  # look-ahead depth (D3)
+        _DONE = object()
+
+        async def _producer() -> None:
+            try:
+                for unit in units:
+                    try:
+                        audio = await self.tts_synthesize(unit, ctx=ctx)
+                    except AllProvidersUnavailable as exc:
+                        await q.put(exc)  # turn-level handling (FR-006)
+                        return
+                    except Exception:  # noqa: BLE001 - skip a bad unit (FR-007)
+                        continue
+                    await q.put(audio)
+                await q.put(_DONE)
+            except asyncio.CancelledError:
+                raise
+
+        prod = asyncio.create_task(_producer())
+        try:
+            while True:
+                item = await q.get()
+                if item is _DONE:
+                    return
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
+        finally:
+            prod.cancel()
+            try:
+                await prod
+            except BaseException:  # noqa: BLE001 - teardown must not leak
+                pass

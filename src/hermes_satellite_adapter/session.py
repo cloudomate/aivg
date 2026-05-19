@@ -56,6 +56,20 @@ class MediaTransport(Protocol):
     async def close(self) -> None: ...
 
 
+async def _reply_audio(bridge, text: str, ctx):
+    """Yield reply audio in order. If the bridge can stream
+    (``tts_stream`` — the real Hermes bridge), speak it sentence-by-sentence
+    (feature 006); otherwise fall back to a single synthesized clip so the
+    fake-transport conversation suite behaves byte-identically to before
+    (FR-008 / SC-006 — no test changes)."""
+    stream = getattr(bridge, "tts_stream", None)
+    if stream is not None:
+        async for audio in stream(text, ctx=ctx):
+            yield audio
+    else:
+        yield await bridge.tts_synthesize(text, ctx=ctx)
+
+
 class Session:
     def __init__(
         self,
@@ -207,8 +221,12 @@ class Session:
         if reply.is_empty or not reply.text:
             return  # empty / tool-only turn → clean return to listening
         self._set_state(SessionState.SPEAKING)
-        audio = await self._bridge.tts_synthesize(reply.text, ctx=self._ctx)
-        await self._transport.send_audio(audio)
+        # Feature 006: speak the reply in order, one speakable unit at a time.
+        # Each send_audio blocks until that unit has drained (feature 005),
+        # so the barge-in watcher stays live across the whole streamed reply
+        # and cancelling this task abandons not-yet-played/synthesized units.
+        async for audio in _reply_audio(self._bridge, reply.text, self._ctx):
+            await self._transport.send_audio(audio)
 
     async def _watch_for_bargein(self) -> bytes:
         """Return the first inbound frame that Hermes flags as speech start."""
