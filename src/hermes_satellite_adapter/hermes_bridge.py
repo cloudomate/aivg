@@ -27,6 +27,26 @@ class AllProvidersUnavailable(RuntimeError):
     """
 
 
+class _EmptyAfterStrip(Exception):
+    """Feature 009: a speakable unit became empty after Hermes's
+    ``_strip_markdown_for_tts`` (e.g. a code-only / URL-only unit). NOT an
+    ``AllProvidersUnavailable`` (that is turn-level): callers' existing
+    per-unit ``except Exception: continue`` skips it → no synthesis, no
+    zero-length audio, no new handler (FR-007 / contract H5)."""
+
+
+class _UnitSynthFailed(Exception):
+    """One unit produced no audio (Hermes ``text_to_speech_tool`` returned
+    ``success:false`` for THIS text — e.g. Piper rendered 0 frames →
+    ``wave.Error: # channels not specified``). This is a per-unit render
+    failure, NOT a provider outage: it MUST skip just this unit and let the
+    rest of the answer keep speaking (FR-007). Only a genuine
+    provider/dependency outage stays ``AllProvidersUnavailable`` (fatal,
+    perceptible — FR-008). Mis-classifying the former as the latter made a
+    single unspeakable line kill the whole spoken answer (the "100-line
+    story stopped after the intro" defect)."""
+
+
 @dataclass
 class SessionCtx:
     """Per-session context handed across the bridge. Provider selection lives
@@ -261,13 +281,45 @@ class HermesV013Bridge:
                 from tools.tts_tool import text_to_speech_tool  # type: ignore
             except Exception as exc:  # pragma: no cover - host-only path
                 raise AllProvidersUnavailable(f"Hermes TTS unavailable: {exc}")
-            raw = text_to_speech_tool(text)  # provider/voice from config
+            # Feature 009: speak clean prose. Apply Hermes's OWN
+            # tools.tts_tool._strip_markdown_for_tts BEFORE synthesis —
+            # exactly as Hermes's gateway `_send_voice_reply` and CLI voice
+            # do (markdown-stripping is a *caller* responsibility in Hermes;
+            # text_to_speech_tool does NOT self-strip). Pure reuse: no
+            # bespoke normalizer, no emoji/length/config added (constitution
+            # I/IV; specs/009). One site → covers feature-008 `agent_stream`
+            # AND feature-006 `tts_stream` (both synthesize via this method).
+            # If the helper is missing or raises, fall back to the raw text —
+            # never worse than today (FR-008 / contract H6).
+            try:
+                from tools.tts_tool import _strip_markdown_for_tts  # type: ignore  # noqa: WPS433
+                spoken = _strip_markdown_for_tts(text)
+            except Exception:  # noqa: BLE001 - FR-008 raw fallback
+                spoken = text
+            if not spoken or not spoken.strip():
+                raise _EmptyAfterStrip()  # FR-007 / H5 — skip this unit
+            raw = text_to_speech_tool(spoken)  # provider/voice from config
             try:
                 payload = json.loads(raw)
             except (TypeError, ValueError):
                 raise AllProvidersUnavailable(f"unexpected TTS result: {raw!r}")
             if not payload.get("success", True):
-                raise AllProvidersUnavailable(payload.get("error", "TTS failed"))
+                err = str(payload.get("error", "TTS failed"))
+                low = err.lower()
+                # Genuine provider/dependency OUTAGE → fatal & perceptible
+                # (FR-008): every unit would fail, so surface it.
+                if (
+                    "not installed" in low
+                    or "no tts provider" in low
+                    or "dependency missing" in low
+                    or "not available" in low
+                ):
+                    raise AllProvidersUnavailable(err)
+                # Otherwise THIS text just produced no audio (Piper 0-frame
+                # / "produced no output" / "generation failed"). Skip only
+                # this unit so the rest of the answer keeps speaking
+                # (FR-007) — do NOT kill the whole turn.
+                raise _UnitSynthFailed(err)
             path = payload.get("file_path") or (
                 payload.get("media", "").removeprefix("MEDIA:") or None
             )
