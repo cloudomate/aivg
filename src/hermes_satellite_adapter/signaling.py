@@ -267,6 +267,18 @@ class AiortcTransport:  # pragma: no cover - host-only (needs aiortc/av)
         self._emit("send_audio: enqueued frames for playback", frames=enq,
                    approx_seconds=round(enq * _FRAME_MS / 1000.0, 2),
                    pcm_peak=peak, raw_bytes=raw_total, first=first_meta)
+        # Block until the clip has actually been sent (queue drained by the
+        # outbound track at real-time pace). This keeps session.py in SPEAKING
+        # for the REAL playback duration so the barge-in watcher stays live and
+        # can interrupt mid-playback (SC-004). stop_playback() drains the queue
+        # on barge-in → this returns promptly; close()/cancellation also unwind
+        # here. session.py and the MediaTransport contract are unchanged
+        # (FakeTransport.send_audio still returns instantly).
+        import asyncio as _aio
+
+        while not self._closed and not self._out_q.empty():
+            await _aio.sleep(0.05)
+        self._emit("send_audio: playback drained", frames=enq)
 
     async def stop_playback(self) -> None:
         # Barge-in: drop everything queued; the outbound track falls back to
