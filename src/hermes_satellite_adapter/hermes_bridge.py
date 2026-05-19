@@ -152,22 +152,23 @@ class HermesV013Bridge:
         self,
         agent_runner: "Callable[[str, SessionCtx], Awaitable[str]] | None" = None,
         *,
-        interrupt_cb: "Callable[[str], None] | None" = None,
         frame_seconds: float = 0.02,
         pcm_sample_rate: int = 48000,
     ) -> None:
+        # Retained only for the FR-005 feature-006 fallback (agent_turn via
+        # the gateway handle_message→send-future path). Feature 008's
+        # streaming path runs Hermes's AIAgent directly and aborts it via
+        # the agent's OWN .interrupt() — no adapter-side interrupt callback.
         self._agent_runner = agent_runner
-        # Feature 007: called on barge-in to stop the in-flight Hermes agent
-        # (the adapter routes it to interrupt_session_activity). Constitution
-        # I — we trigger Hermes's own interrupt, we don't cancel the agent.
-        self._interrupt_cb = interrupt_cb
         self._frame_seconds = frame_seconds
         self._sr = pcm_sample_rate
         self._ep: dict[str, _EndpointState] = {}
-        # session_id -> (IncrementalUnitAssembler, asyncio.Queue) for the
-        # in-flight streamed reply. Populated by agent_stream(), fed by the
-        # adapter's send_draft()/send() hooks.
-        self._stream_chans: dict = {}
+        # Feature 008: one persistent Hermes AIAgent per voice session
+        # (cached by ctx.session_id) + a shared SessionDB → multi-turn
+        # conversation continuity at cli.py parity (FR-012). The active
+        # agent per session is tracked so barge-in can .interrupt() it.
+        self._session_agents: dict = {}
+        self._session_db = None
         self._rms_threshold, self._silence_secs = self._load_silence_rule()
 
     @staticmethod
@@ -338,144 +339,232 @@ class HermesV013Bridge:
                 pass
 
     # -----------------------------------------------------------------
-    # Feature 007 — end-to-end streaming: consume Hermes's own
-    # draft-streaming hook (adapter.send_draft/send) and speak the answer
-    # WHILE the agent is still composing it. Host-only (the adapter wiring
-    # + real agent streaming are constitution-V host-proven); the fake
-    # bridge has none of this, so the fake suite takes the unchanged
-    # feature-006 path verbatim (FR-005 / SC-007).
+    # Feature 008 — agent text-delta streaming seam (supersedes feature
+    # 007's draft-hook, proven unreachable for the LOCAL/voice path on
+    # hermes-agent v0.14.0 — research.md D1/D2). We run Hermes's OWN
+    # ``AIAgent`` the way its CLI/Discord voice modes do: construct it
+    # exactly as ``cli.py`` does (model/runtime inherited from Hermes
+    # config — constitution IV) with a per-call ``stream_callback`` that
+    # receives text deltas AS the agent generates, feed those deltas
+    # through feature 007's reused ``IncrementalUnitAssembler`` → existing
+    # Hermes ``tts_synthesize`` (Piper) → WebRTC, so the first sentence is
+    # spoken while the agent is still composing the rest. Host-only
+    # (constitution V host-proven); the fake bridge exposes no
+    # ``agent_stream`` so the fake suite takes the unchanged feature-006
+    # path verbatim (FR-005 / SC-007). Barge-in aborts generation via the
+    # agent's OWN ``.interrupt()`` (no orphan generation — FR-004).
     # -----------------------------------------------------------------
 
-    _STREAM_DONE = object()
+    def _get_session_agent(self, ctx: SessionCtx):  # pragma: no cover - host-only
+        """Get/construct the persistent Hermes ``AIAgent`` for this voice
+        session, cached by ``ctx.session_id`` over a SHARED ``SessionDB`` +
+        a stable per-session ``session_id`` — so a follow-up turn sees the
+        prior turns' context exactly as the gateway ``handle_message`` path
+        did (multi-turn continuity at feature-006 parity — FR-012).
 
-    def feed_draft(self, session_id: str, content: str) -> None:  # pragma: no cover
-        """Adapter ``send_draft`` hook: ``content`` is the cumulative draft so
-        far. Emit any newly-complete speakable units onto the session queue
-        (assembler buffers an incomplete trailing sentence — FR-003)."""
-        chan = self._stream_chans.get(session_id)
-        import logging as _lg
-        _lg.getLogger("satellite.f007").info(
-            "F007 feed_draft sid=%s chan=%s len=%d",
-            session_id, chan is not None, len(content or ""),
+        Constructed exactly the way ``cli.py`` constructs it (model +
+        runtime credentials INHERITED from Hermes config via
+        ``resolve_runtime_provider``/``_get_model_config`` — constitution
+        IV; no provider/model hardcoded here). Raises on any host
+        import/construction failure so the caller takes the FR-005
+        feature-006 fallback.
+        """
+        sid = ctx.session_id
+        agent = self._session_agents.get(sid)
+        if agent is not None:
+            return agent
+        from run_agent import AIAgent  # noqa: WPS433 - host-only, lazy
+        from hermes_cli.runtime_provider import (  # noqa: WPS433
+            _get_model_config,
+            resolve_runtime_provider,
         )
-        if chan is None:
-            return  # no active stream consumer for this session
-        asm, q, saw = chan
-        saw[0] = True
-        for unit in asm.push(content):
-            q.put_nowait(unit)
+        from hermes_state import SessionDB  # noqa: WPS433
 
-    def feed_final(self, session_id: str, content: str) -> None:  # pragma: no cover
-        """Adapter final ``send`` hook: flush the assembler (the buffered
-        tail, or — if no draft frame was ever seen — the WHOLE reply, which
-        is exactly feature 006), then signal completion. Idempotent flush
-        makes a duplicate finalize a no-op (A4)."""
-        chan = self._stream_chans.get(session_id)
-        import logging as _lg
-        _lg.getLogger("satellite.f007").info(
-            "F007 feed_final sid=%s chan=%s len=%d saw_draft=%s",
-            session_id, chan is not None, len(content or ""),
-            (chan[2][0] if chan else None),
+        if self._session_db is None:
+            self._session_db = SessionDB()  # one shared DB for the bridge
+        model = (_get_model_config().get("default") or "").strip()
+        runtime = resolve_runtime_provider()
+        agent = AIAgent(
+            model=model,
+            api_key=runtime.get("api_key"),
+            base_url=runtime.get("base_url"),
+            provider=runtime.get("provider"),
+            api_mode=runtime.get("api_mode"),
+            session_id="satellite_%s" % sid,
+            platform="satellite",
+            session_db=self._session_db,
+            quiet_mode=True,
         )
-        if chan is None:
-            return
-        asm, q, _saw = chan
-        for unit in asm.flush(content):
-            q.put_nowait(unit)
-        q.put_nowait(self._STREAM_DONE)
+        self._session_agents[sid] = agent
+        return agent
+
+    async def _agent_stream_006_fallback(  # pragma: no cover - host-only
+        self, user_text: str, *, ctx: SessionCtx, turn=None
+    ):
+        """FR-005: the Hermes delta seam is unavailable for this turn (host
+        import/construct failure). Resolve the reply EXACTLY as feature 006
+        — full reply via the gateway ``agent_turn``, then the existing
+        per-sentence ``tts_stream`` — so it is never worse than 006."""
+        reply = await self.agent_turn(user_text, ctx=ctx)
+        if turn is not None:
+            turn.agent_text = reply.text or ""
+        if reply.is_empty or not (reply.text or "").strip():
+            return  # empty / tool-only → back to listening
+        async for audio in self.tts_stream(reply.text, ctx=ctx):
+            yield audio
 
     async def agent_stream(self, user_text: str, *, ctx: SessionCtx, turn=None):  # pragma: no cover
-        """Yield reply audio AS the agent generates it.
+        """Yield reply audio AS Hermes's agent generates it.
 
-        Starts the gateway agent (same ``handle_message`` path as feature
-        006); meanwhile consumes speakable units the adapter's
-        ``send_draft``/``send`` hooks push through the per-session assembler,
-        synthesising each via the EXISTING Hermes ``tts_synthesize`` and
-        yielding audio in order. The consumer (``session._respond``) plays
-        one unit at a time, so later units synthesise while earlier ones
-        play (FR-001/FR-002, SC-001/SC-002).
+        Runs Hermes's own ``AIAgent.run_conversation`` in a worker thread
+        with a ``stream_callback`` that receives text deltas; each delta is
+        folded into feature 007's reused ``IncrementalUnitAssembler`` and
+        every newly-complete sentence is synthesised via the EXISTING Hermes
+        ``tts_synthesize`` and yielded in order. The consumer
+        (``session._respond``) plays one unit at a time, so later sentences
+        synthesise while earlier ones play and the first is spoken while the
+        agent is still composing the rest (FR-001/FR-002, SC-001/SC-002).
 
-        - empty / tool-only reply → yields nothing (return to listening)
+        - empty input / tool-only reply → yields nothing (return to listening)
         - a unit whose synth raises a generic error is skipped (FR-007)
-        - ``AllProvidersUnavailable`` (or an agent failure) propagates so the
+        - ``AllProvidersUnavailable`` / an agent failure propagates so the
           existing turn-level handling fires — perceptible failure, not a
           hang (FR-008 / contract H6)
-        - on consumer close/cancel (barge-in) the agent is interrupted via
-          Hermes's own interrupt and the channel torn down — no orphan unit
-          AND no orphan generation (FR-004 / SC-004)
-        - if no draft frame is ever seen, the final ``send`` flushes the
-          whole reply → identical to feature 006 (FR-005)
+        - on consumer close/cancel (barge-in) Hermes's agent is interrupted
+          via its OWN ``.interrupt()`` and the worker abandoned — no orphan
+          sentence AND no orphan generation (FR-004 / SC-004)
+        - if the delta seam cannot be reached for this turn, falls back to
+          feature 006 verbatim (FR-005)
         """
         import asyncio
 
         from .streamasm import IncrementalUnitAssembler  # noqa: WPS433
 
-        if self._agent_runner is None:
-            raise NotImplementedError(
-                "agent_runner not injected: adapter.register must wire the "
-                "gateway BasePlatformAdapter.handle_message path (VG-3/D16)."
-            )
         if not user_text.strip():
             return  # empty input → empty / tool-only turn
 
-        sid = ctx.session_id
-        import logging as _lg
-        _lg.getLogger("satellite.f007").info(
-            "F007 agent_stream ENTER sid=%s text=%r", sid, user_text[:60]
-        )
+        try:
+            agent = self._get_session_agent(ctx)
+        except Exception:  # noqa: BLE001 - FR-005 mandatory fallback to 006
+            async for audio in self._agent_stream_006_fallback(
+                user_text, ctx=ctx, turn=turn
+            ):
+                yield audio
+            return
+
+        # FR-012 multi-turn continuity at cli.py parity: restore this
+        # session's prior turns from the SHARED SessionDB and feed them in
+        # as conversation_history (conversation_loop logs `history=N` from
+        # exactly this arg and DOES NOT auto-restore — the caller must, as
+        # cli.py does via get_messages_as_conversation). conversation_loop's
+        # `_persist_session` writes each turn back keyed by
+        # `agent.session_id`, so the NEXT turn sees this one. Restore
+        # failure is non-fatal — degrade to a stateless turn, never worse.
+        history = []
+        try:
+            history = self._session_db.get_messages_as_conversation(
+                agent.session_id
+            ) or []
+        except Exception:  # noqa: BLE001 - continuity best-effort, never fatal
+            history = []
+
+        loop = asyncio.get_running_loop()
+        asm = IncrementalUnitAssembler()
         q: "asyncio.Queue" = asyncio.Queue()
-        saw = [False]
-        self._stream_chans[sid] = (IncrementalUnitAssembler(), q, saw)
+        cumulative = [""]  # rebuilt cumulative reply (well-tested asm path)
 
-        agent_task = asyncio.create_task(self._agent_runner(user_text, ctx))
+        def _cb(delta: str) -> None:
+            # Agent worker thread → event loop (run_conversation is blocking
+            # and calls this synchronously per text delta).
+            loop.call_soon_threadsafe(q.put_nowait, ("delta", delta or ""))
 
-        def _on_agent_done(t: "asyncio.Task") -> None:
-            # If the agent finished/failed WITHOUT a final send() (e.g. an
-            # exception before delivery), unblock the consumer so the turn
-            # fails perceptibly instead of hanging (FR-008 / H6).
-            exc = None
+        def _run() -> str:
+            # The cached AIAgent is REUSED across turns (FR-012). A prior
+            # turn's barge-in left `_interrupt_requested=True`;
+            # conversation_loop deliberately PRESERVES a pending interrupt
+            # at turn start (it does not auto-clear) and expects the caller
+            # to clear it once handled — exactly as cli.py does. Without
+            # this, every turn after the first barge-in ends instantly
+            # `interrupted_by_user` (api_calls=0, response_len=0) → no
+            # reply, no audio. This NEW user utterance is the fresh-start
+            # signal, so clear the stale interrupt before running.
             try:
-                exc = t.exception()
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                exc = None
-            q.put_nowait(exc if exc is not None else self._STREAM_DONE)
+                agent.clear_interrupt()
+            except Exception:  # noqa: BLE001 - best-effort, never block a turn
+                pass
+            result = agent.run_conversation(
+                user_text, conversation_history=history, stream_callback=_cb
+            )
+            if isinstance(result, dict):
+                return (
+                    result.get("final_response")
+                    or result.get("response")
+                    or result.get("text")
+                    or ""
+                )
+            return result if isinstance(result, str) else ""
 
-        agent_task.add_done_callback(_on_agent_done)
+        run_task = asyncio.create_task(asyncio.to_thread(_run))
+
+        def _on_done(t: "asyncio.Task") -> None:
+            # Fires on the loop thread when the worker finishes. If it was
+            # cancelled (barge-in / consumer teardown) the consumer is
+            # already gone — deliver nothing (calling .result()/.exception()
+            # on a cancelled task re-raises CancelledError; never let this
+            # callback leak — FR-004/teardown).
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                q.put_nowait(("error", exc))
+            else:
+                q.put_nowait(("done", t.result() or ""))
+
+        run_task.add_done_callback(_on_done)
 
         interrupted = False
         try:
             while True:
-                item = await q.get()
-                if item is self._STREAM_DONE:
+                kind, payload = await q.get()
+                if kind == "error":
+                    raise payload  # perceptible turn failure (FR-008/H6)
+                if kind == "done":
+                    units = asm.flush(payload or cumulative[0])
+                else:  # "delta"
+                    cumulative[0] += payload
+                    units = asm.push(cumulative[0])
+                for unit in units:
+                    if not unit or not unit.strip():
+                        continue  # never synth an empty/whitespace unit:
+                        # Hermes Piper writes a 0-frame WAV → wave.Error
+                        # "# channels not specified" (no half/empty audio,
+                        # FR-003); nothing to speak.
+                    try:
+                        audio = await self.tts_synthesize(unit, ctx=ctx)
+                    except AllProvidersUnavailable:
+                        raise  # turn-level handling (FR-006/FR-008)
+                    except Exception:  # noqa: BLE001 - skip a bad unit (FR-007)
+                        continue
+                    yield audio
+                if kind == "done":
+                    if turn is not None:
+                        turn.agent_text = payload or cumulative[0]
                     break
-                if isinstance(item, BaseException):
-                    raise item
-                try:
-                    audio = await self.tts_synthesize(item, ctx=ctx)
-                except AllProvidersUnavailable:
-                    raise  # turn-level handling (FR-006/FR-008)
-                except Exception:  # noqa: BLE001 - skip a bad unit (FR-007)
-                    continue
-                yield audio
-            if turn is not None and agent_task.done() and not agent_task.cancelled():
-                exc = agent_task.exception()
-                if exc is None:
-                    turn.agent_text = (agent_task.result() or "")
         except (asyncio.CancelledError, GeneratorExit):
             interrupted = True
             raise
         finally:
-            self._stream_chans.pop(sid, None)
-            if not agent_task.done():
-                # Barge-in / failure with the agent still running: stop
-                # Hermes's generation (no orphan), THEN drop our task.
-                if interrupted and self._interrupt_cb is not None:
+            if not run_task.done():
+                # Barge-in / failure with the agent still generating: stop
+                # Hermes's OWN generation (no orphan — FR-004/SC-004), THEN
+                # abandon the worker.
+                if interrupted:
                     try:
-                        self._interrupt_cb(sid)
+                        agent.interrupt()
                     except Exception:  # noqa: BLE001
                         pass
-                agent_task.cancel()
+                run_task.cancel()
             try:
-                await agent_task
+                await run_task
             except BaseException:  # noqa: BLE001 - teardown must not leak
                 pass

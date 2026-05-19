@@ -172,6 +172,12 @@ returns to the previous state.
 - **FR-011**: This feature supersedes feature 007's draft-streaming-hook
   approach for delivering incremental speech; feature 007's locally-provable
   assembler and its unit tests are reused unchanged.
+- **FR-012**: Multi-turn conversation continuity MUST be preserved at parity
+  with feature 006: switching from the gateway-managed `handle_message` path
+  to running the agent directly MUST NOT drop session/conversation context —
+  a follow-up turn MUST still see the prior turns' context (the agent run is
+  given the same session identity and prior conversation history Hermes would
+  have supplied via the previous path). No multi-turn memory regression.
 
 ### Key Entities *(include if feature involves data)*
 
