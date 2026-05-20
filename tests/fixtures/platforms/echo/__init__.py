@@ -47,3 +47,15 @@ async def _yield_once(s: str):
 
 
 PLATFORM = EchoAgentPlatform()
+
+# Feature 013: re-export SetupCapability so the symlink-based fixture also
+# answers `PluginRegistry.load_setup_capability("echo")` in subprocesses.
+# The seam test (test_agent_platform_seam.py) loads this module via
+# `spec_from_file_location`, which strips package context and breaks the
+# relative `from .setup` import — that's fine, the seam test only needs
+# PLATFORM, not SETUP. Swallow the ImportError silently in that path.
+try:
+    from .setup import SETUP, EchoSetupCapability  # noqa: E402, F401
+    __all__ = ["EchoAgentPlatform", "PLATFORM", "SETUP", "EchoSetupCapability"]
+except ImportError:  # pragma: no cover - seam-test fallback
+    __all__ = ["EchoAgentPlatform", "PLATFORM"]

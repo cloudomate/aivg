@@ -220,3 +220,202 @@ def reset_migration_sentinel_for_tests() -> None:
     """
     global _MIGRATION_DONE
     _MIGRATION_DONE = False
+
+
+# =============================================================================
+# Feature 013 — Install-backup folders + lock file (R-4, R-5)
+# =============================================================================
+
+DEFAULT_INSTALLS_DIR = Path("~/.aivg/installs").expanduser()
+DEFAULT_SETUP_LOCK = Path("~/.aivg/setup.lock").expanduser()
+
+
+def new_install_backup(platform: str, mode: str, *, root: Optional[Path] = None) -> Path:
+    """Create a fresh timestamped backup folder for an install/uninstall/
+    rollback run. Returns the folder path.
+
+    Layout (data-model.md §3):
+        ~/.aivg/installs/<platform>/<UTC-YYYYMMDDTHHMMSSZ>/
+            manifest.json   (mode, started_at, opts)
+    """
+    if mode not in ("install", "uninstall", "rollback"):
+        raise ValueError(f"unknown install-backup mode: {mode!r}")
+    base = (root or DEFAULT_INSTALLS_DIR) / platform
+    base.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    # If a folder with this exact UTC second already exists, append a
+    # short suffix so we never overwrite.
+    target = base / ts
+    suffix = 0
+    while target.exists():
+        suffix += 1
+        target = base / f"{ts}-{suffix}"
+    target.mkdir()
+    _atomic_write_json(
+        target / "manifest.json",
+        {
+            "feature": "013-aivg-setup-cli",
+            "mode": mode,
+            "platform": platform,
+            "started_at": time.time(),
+            "finished_at": None,
+            "result": None,
+            "failure_phase": None,
+        },
+    )
+    return target
+
+
+def record_pre_state(
+    backup_dir: Path,
+    *,
+    config_path: Optional[Path] = None,
+    plugin_dirs: Optional[dict[str, str]] = None,
+    aivg_install_marker_present: bool = False,
+) -> None:
+    """Capture the pre-mutation host state into the backup folder."""
+    import hashlib
+
+    config_sha = None
+    if config_path is not None and config_path.exists():
+        config_sha = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        # Copy the config file verbatim so the operator has a true-source
+        # for rollback (not just a hash).
+        shutil.copy2(config_path, backup_dir / "config.yaml.before")
+    payload = {
+        "config_file": str(config_path) if config_path else None,
+        "config_sha256": config_sha,
+        "plugin_dirs": dict(plugin_dirs or {}),
+        "aivg_install_marker_present": aivg_install_marker_present,
+    }
+    _atomic_write_json(backup_dir / "pre_state.json", payload)
+
+
+def append_phase(backup_dir: Path, phase) -> None:  # phase: SetupPhase
+    """Append one SetupPhase JSON line to ``phases.ndjson``."""
+    rec = {
+        "name": phase.name,
+        "status": phase.status,
+        "detail": phase.detail,
+        "at": time.time(),
+    }
+    with (backup_dir / "phases.ndjson").open("a") as fh:
+        fh.write(json.dumps(rec, separators=(",", ":")) + "\n")
+
+
+def finalize_backup(
+    backup_dir: Path,
+    *,
+    result: str,
+    failure_phase: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+) -> None:
+    """Update manifest.json with terminal state; write
+    failure_reason.txt if the run failed."""
+    manifest_path = backup_dir / "manifest.json"
+    try:
+        m = json.loads(manifest_path.read_text())
+    except (OSError, ValueError):
+        m = {}
+    m["finished_at"] = time.time()
+    m["result"] = result
+    m["failure_phase"] = failure_phase
+    _atomic_write_json(manifest_path, m)
+    if failure_reason:
+        (backup_dir / "failure_reason.txt").write_text(failure_reason + "\n")
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    os.replace(tmp, path)
+
+
+# --- Lock file (R-4) ---------------------------------------------------------
+
+
+class SetupLockHeld(RuntimeError):
+    """Raised when another `aivg setup` invocation already holds the
+    process-mutex on this host.
+
+    Carries the prior invocation's metadata for diagnostics. The CLI
+    maps this to error.code = setup_lock_held.
+    """
+
+    def __init__(self, lock_path: Path, running_meta: dict) -> None:
+        super().__init__(
+            f"another `aivg setup` is running (pid={running_meta.get('pid')}, "
+            f"started_at={running_meta.get('started_at')}); lock at {lock_path}"
+        )
+        self.lock_path = lock_path
+        self.meta = running_meta
+
+
+class _SetupLock:
+    """Context manager wrapping `fcntl.flock(LOCK_EX | LOCK_NB)` on the
+    AIVG setup lock file. Single-host scope; multi-host is out of scope
+    per the spec."""
+
+    def __init__(self, lock_path: Path) -> None:
+        self.lock_path = lock_path
+        self._fh = None
+
+    def __enter__(self):
+        import fcntl
+
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        # Open for read+write+create (don't truncate yet — we want to
+        # preserve any prior content so we can surface it on contention).
+        self._fh = open(self.lock_path, "a+")
+        self._fh.seek(0)
+        try:
+            fcntl.flock(self._fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            # Someone else holds the flock. Read whatever they wrote so
+            # we can identify them in the error.
+            prior = {}
+            try:
+                self._fh.seek(0)
+                prior = json.loads(self._fh.read() or "{}")
+            except (OSError, ValueError):
+                pass
+            self._fh.close()
+            self._fh = None
+            raise SetupLockHeld(self.lock_path, prior) from None
+        # Acquired. Rewrite our identity so a future contender knows who
+        # we are.
+        try:
+            import sys as _sys
+            self._fh.seek(0)
+            self._fh.truncate()
+            json.dump(
+                {
+                    "pid": os.getpid(),
+                    "argv": list(_sys.argv),
+                    "started_at": time.time(),
+                    "host": os.uname().nodename if hasattr(os, "uname") else "",
+                },
+                self._fh,
+            )
+            self._fh.flush()
+        except OSError:
+            pass
+        return self
+
+    def __exit__(self, *exc):
+        import fcntl
+
+        if self._fh is None:
+            return
+        try:
+            fcntl.flock(self._fh, fcntl.LOCK_UN)
+        finally:
+            self._fh.close()
+            self._fh = None
+
+
+def acquire_setup_lock(*, lock_path: Optional[Path] = None) -> _SetupLock:
+    """Acquire the AIVG-setup mutex for the duration of an install/
+    uninstall/rollback. Use as a context manager."""
+    return _SetupLock(lock_path or DEFAULT_SETUP_LOCK)

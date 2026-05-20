@@ -32,8 +32,29 @@ def _aivg(*args: str) -> str:
 
 def test_root_help_lists_every_documented_top_level_command():
     out = _aivg("--help")
-    for cmd in ("list", "watch", "logs", "device", "fleet", "ota", "onboard"):
+    for cmd in ("list", "watch", "logs", "device", "fleet", "ota", "onboard", "setup", "deploy"):
         assert cmd in out, f"top-level command {cmd!r} missing from --help"
+
+
+# --- feature 013: setup / deploy commands -------------------------------
+
+
+def test_setup_help_lists_every_setup_flag():
+    """`aivg setup --help` lists every flag from setup-cli-contract.md."""
+    out = _aivg("setup", "--help")
+    for flag in (
+        "--platform", "--preflight", "--uninstall", "--restore-backup",
+        "--parity-check", "--yes", "--force", "--legacy-hermes", "--no-tune",
+        "--phrase",
+    ):
+        assert flag in out, f"`aivg setup --help` missing {flag!r}"
+
+
+def test_deploy_help_mirrors_setup_help():
+    """FR-001: `aivg deploy` is an exact synonym of `aivg setup`."""
+    out = _aivg("deploy", "--help")
+    for flag in ("--platform", "--preflight", "--uninstall", "--yes"):
+        assert flag in out, f"`aivg deploy --help` missing {flag!r}"
 
 
 def test_device_subcommands():

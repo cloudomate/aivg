@@ -22,7 +22,13 @@ from typing import AsyncIterator, Optional
 from . import bridge  # re-export the bridge module (existing import paths)
 from .bridge import AgentReply, HermesBridge, SessionCtx, UnboundHermesBridge
 
-__all__ = ["bridge", "HermesAgentPlatform", "PLATFORM"]
+# Feature 013 — deploy-layer SetupCapability for Hermes.
+from .setup import SETUP, HermesSetupCapability  # noqa: F401
+
+__all__ = [
+    "bridge", "HermesAgentPlatform", "PLATFORM",
+    "SETUP", "HermesSetupCapability",
+]
 
 
 class HermesAgentPlatform:

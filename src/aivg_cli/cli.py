@@ -61,6 +61,19 @@ app.add_typer(fleet_app, name="fleet")
 ota_app = typer.Typer(no_args_is_help=True, help="Per-device OTA firmware updates.")
 app.add_typer(ota_app, name="ota")
 
+# Feature 013 — `aivg setup` / `aivg deploy` (platform-agnostic host install).
+from .setup import setup_app  # noqa: E402  (after `app` is defined)
+app.add_typer(
+    setup_app,
+    name="setup",
+    help="Install AIVG into the active agent platform (Hermes / OpenClaw / ...).",
+)
+app.add_typer(
+    setup_app,
+    name="deploy",
+    help="Synonym for `aivg setup`. Same flags, same behavior.",
+)
+
 
 # --- Global state --------------------------------------------------------
 
