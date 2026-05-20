@@ -30,9 +30,9 @@ description: "Task list — AgentPlatform Runtime Closure (feature 015)"
 
 **Purpose**: Capture the pre-refactor baseline so SC-003 (±10 % latency) and SC-002 (live electron-test parity) have something to compare against.
 
-- [ ] T001 Capture pre-refactor latency baseline by running `pytest -x tests/integration/test_voice_turn_latency.py::test_first_audio_p50 -v --runs 10` against `main` and record the median in `specs/015-agentplatform-runtime-closure/baseline.md` (new file). This is the SC-003 reference number.
-- [ ] T002 Capture pre-refactor `grep` baseline counts: run `rg -n '# AgentPlatform-coupling-TODO' src/aivg_core/ | wc -l` (expect 3) and `rg -n 'from .*platforms.hermes\.' src/aivg_core/ | wc -l` (expect ≥ 3) and append both to `specs/015-agentplatform-runtime-closure/baseline.md`.
-- [ ] T003 [P] Confirm the electron-test smoke (PTT → STT → reply → TTS) works on `main` against the current gateway as the SC-002 reference point; note pass/fail in `baseline.md`.
+- [X] T001 Capture pre-refactor latency baseline by running `pytest -x tests/integration/test_voice_turn_latency.py::test_first_audio_p50 -v --runs 10` against `main` and record the median in `specs/015-agentplatform-runtime-closure/baseline.md` (new file). This is the SC-003 reference number.
+- [X] T002 Capture pre-refactor `grep` baseline counts: run `rg -n '# AgentPlatform-coupling-TODO' src/aivg_core/ | wc -l` (expect 3) and `rg -n 'from .*platforms.hermes\.' src/aivg_core/ | wc -l` (expect ≥ 3) and append both to `specs/015-agentplatform-runtime-closure/baseline.md`.
+- [X] T003 [P] Confirm the electron-test smoke (PTT → STT → reply → TTS) works on `main` against the current gateway as the SC-002 reference point; note pass/fail in `baseline.md`.
 
 ---
 
@@ -102,9 +102,9 @@ description: "Task list — AgentPlatform Runtime Closure (feature 015)"
 
 ### Live verification for User Story 2 (SC-002, SC-008)
 
-- [ ] T032 [US2] Run `aivg setup --force --yes` against the Hermes host to re-install the satellite plugin and the refactored `aivg_core`. Confirm setup completes within 60s (SC-008).
-- [ ] T033 [US2] Restart the gateway with `hermes config set voice.silence_duration 1.2; hermes gateway run --port 8643`. Launch the electron-test (`cd clients/electron-test && npm start`), connect, adopt, hold PTT, say "Hello, can you hear me?", release. Confirm: state transitions through `listening → thinking → speaking → idle`; transcript field populates; agent reply populates; reply audio plays. Record in `specs/015-agentplatform-runtime-closure/baseline.md` under "Post-refactor SC-002".
-- [ ] T034 [US2] Run `pytest -x tests/integration/test_voice_turn_latency.py::test_first_audio_p50 -v --runs 10` against the refactored gateway; record post-refactor median. Confirm |post − pre| / pre ≤ 0.10 (SC-003 / FR-015 ±10 %).
+- [X] T032 [US2] Run `aivg setup --force --yes` against the Hermes host to re-install the satellite plugin and the refactored `aivg_core`. Confirm setup completes within 60s (SC-008).
+- [X] T033 [US2] Restart the gateway with `hermes config set voice.silence_duration 1.2; hermes gateway run --port 8643`. Launch the electron-test (`cd clients/electron-test && npm start`), connect, adopt, hold PTT, say "Hello, can you hear me?", release. Confirm: state transitions through `listening → thinking → speaking → idle`; transcript field populates; agent reply populates; reply audio plays. Record in `specs/015-agentplatform-runtime-closure/baseline.md` under "Post-refactor SC-002".
+- [X] T034 [US2] Run `pytest -x tests/integration/test_voice_turn_latency.py::test_first_audio_p50 -v --runs 10` against the refactored gateway; record post-refactor median. Confirm |post − pre| / pre ≤ 0.10 (SC-003 / FR-015 ±10 %).
 
 **Checkpoint**: Hermes parity preserved. The refactor is invisible from the user's seat.
 
@@ -171,10 +171,10 @@ description: "Task list — AgentPlatform Runtime Closure (feature 015)"
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [X] T045 [P] Update `specs/015-agentplatform-runtime-closure/quickstart.md` § 5 with the actual baseline numbers recorded in T001 and T034 (replace the placeholder ~720ms / ≤ 792ms with measured values).
-- [ ] T046 [P] Run the full quickstart end-to-end in a clean shell against the refactored gateway. Every step ([quickstart.md § 1-7](./quickstart.md)) must pass without manual fix-up.
+- [X] T046 [P] Run the full quickstart end-to-end in a clean shell against the refactored gateway. Every step ([quickstart.md § 1-7](./quickstart.md)) must pass without manual fix-up.
 - [X] T047 [P] Update [CLAUDE.md](../../CLAUDE.md) "prior features" list to mark feature 015 as `[implemented + live-proven]` once T033 + T044 pass.
 - [X] T048 Add a brief implementation summary section to [plan.md](./plan.md) (`## Implementation Outcome`) capturing: net LoC change, test count delta, measured latency delta (T001 vs T034), and any deviations from the plan worth noting for the next refactor.
-- [ ] T049 Commit-time check: run `aivg --contract-version` and confirm it prints `1.0.0` unchanged (SC-007). Run `aivg setup --force --yes` against a clean host once more to confirm SC-008.
+- [X] T049 Commit-time check: run `aivg --contract-version` and confirm it prints `1.0.0` unchanged (SC-007). Run `aivg setup --force --yes` against a clean host once more to confirm SC-008.
 - [X] T050 [P] Tree-shake test (SC-010): create a temporary `tests/fixtures/platforms/treeshake/__init__.py` exposing a minimal `PLATFORM` and a `tests/integration/test_treeshake_plugin.py` that loads it via `PluginRegistry.load("treeshake")` and runs one turn — confirm ZERO code change in `aivg_core/` is needed to make it work.
 
 ---

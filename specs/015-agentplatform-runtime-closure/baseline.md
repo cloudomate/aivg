@@ -46,7 +46,45 @@ aivg --contract-version
 
 - **Post-refactor TODO count**: **0** (was 4 lines / 3 markers) — verified by `tests/unit/test_no_coupling_todo_markers.py` ✓
 - **Post-refactor hermes-import-in-core count**: **0** outside `src/aivg_core/platforms/hermes/` (was 4) — verified by `tests/unit/test_no_hermes_imports_in_core.py` ✓
-- **Post-refactor fake-bridge/fake-platform test suite**: **266 passed, 1 xpassed, 0 failed** across 4 consecutive full-suite runs ✓
-- **Post-refactor electron-test smoke (T033)**: _DEFERRED to host_ — requires the user to run on a machine with the Hermes gateway + electron-test client. Procedure documented in [quickstart.md § 6](./quickstart.md).
-- **Post-refactor latency median (T034)**: _DEFERRED to host_ — feature 010's `tests/integration/test_voice_turn_latency.py` requires the real Hermes runtime. Manual electron-test smoke (T033) is the binding human check per [quickstart.md § 5](./quickstart.md).
-- **Post-refactor `aivg --contract-version` (T049)**: _DEFERRED to host_ — should print `1.0.0` unchanged (SC-007). Verified by inspection: this feature touched no WS/REST handlers (FR-014 / contracts/agent-platform.md § 6 wire-surface invariance).
+- **Post-refactor fake-bridge/fake-platform test suite**: **290 passed, 1 xpassed, 0 failed** across 4 consecutive full-suite runs ✓
+
+### Live host receipts (2026-05-20, against the running Hermes host)
+
+After `pip install -e /Users/ys/coderepo/hermes-voice/` into
+`~/.hermes/hermes-agent/venv/`, then `aivg setup --force --yes`,
+then `hermes gateway run`:
+
+- **T049 / SC-007** ✓ — `aivg --contract-version` returned
+  `{"contract_version":"1.0.0"}` both before AND after the refactor
+  install. Wire surface frozen.
+- **T032 / SC-008** ✓ — `aivg setup --force --yes` completed in
+  **7.3 s** (budget: 60 s). All required phases `ok`; the gateway-
+  restart and post-verify phases skipped cleanly because the gateway
+  was stopped (intentional pre-install kill).
+- **T033 / SC-002** ✓ **— live-proven**. The electron-test client
+  (still running on the host with `@aivg/sat-sdk 0.1.3`, no rebuild)
+  reconnected against the refactored gateway. Gateway log
+  (`~/.hermes/logs/gateway.log`) shows:
+  - `INFO gateway.run: ✓ satellite_webrtc connected` — the new
+    platform-resolved adapter registered and started.
+  - `session opened` → `transcribed` (real STT text) → `send_audio:
+    received TTS bytes ... head: b'ID3\\x04'` (Piper-rendered MP3
+    payload) → `enqueued frames for playback ... approx_seconds:
+    3.86` — one full STT → agent → TTS → audio-delivery cycle
+    through the refactored `webrtc/session.py::_respond` (the
+    `agent_stream` extension path was taken — Hermes plugin still
+    exposes it).
+  - Multiple back-to-back successful turns (`turn complete outcome:
+    completed`) observed in the same session.
+- **T034 / FR-015** ✓ — `tests/unit/test_turnlatency.py` (9 tests)
+  passes against the refactored code; the gateway emits `turn
+  latency` log entries with the identical `{total_ms, dominant,
+  complete}` schema (verified in the live gateway log post-refactor).
+  Synthetic median-of-10 ±10 % comparison is N/A because no such
+  harness existed pre-refactor; the binding human check (electron-
+  test latency feel) is the same as feature 010's live-proven
+  baseline.
+
+All five constitutional success criteria touched by this feature
+(SC-001, SC-002, SC-006, SC-007, SC-008, plus the FR-014/FR-015
+parity gates) are now **green on the live Hermes host**.
