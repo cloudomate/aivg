@@ -6,9 +6,6 @@ plugin** is configured (v1 canonical: **Hermes**; planned: OpenClaw).
 Satellites capture audio and play it back; STT, the agent loop, TTS,
 and end-of-utterance detection live in the upstream agent platform.
 
-> Formerly known as "Hermes Voice" through feature 011. Renamed to AIVG
-> in feature 012. The Hermes name is retained for the v1 agent-platform
-> *plugin*, not the product.
 
 ## Status
 
@@ -29,11 +26,6 @@ aivg device get kitchen   # full state of one device
 aivg logs kitchen --follow
 aivg onboard --ssid "MyWiFi" --password "..." --name "bedroom"
 ```
-
-The legacy binary `sat-cli` (and the legacy Python packages
-`satellite_core` / `sat_cli` / `hermes_satellite_adapter`) keep working
-for **one release** as deprecation-warned compat shims; see
-[specs/012-aivg-branding/quickstart.md](specs/012-aivg-branding/quickstart.md).
 
 ## Repo layout
 
