@@ -1,23 +1,32 @@
-# Contract: `sat-cli` — Satellite Management CLI
+# Contract: `aivg` — AIVG Satellite Management CLI
 
 **Feature**: `011-satellite-management` · **Plan**: [../plan.md](../plan.md) ·
 **Version**: 1.0.0 · **Companions**:
 [management-api.yaml](./management-api.yaml),
 [management-ws.md](./management-ws.md)
 
-`sat-cli` is the **platform-neutral** management CLI (constitution v2.0.0
+`aivg` is the **platform-neutral** management CLI (constitution v2.0.0
 Principle IV). It is a separate binary from any agent platform's own CLI
 (distinct from `hermes`). The Hermes agent skill and any other per-platform
-skill invoke `sat-cli` as their single execution surface; agents and
+skill invoke `aivg` as their single execution surface; agents and
 scripts consume the JSON output documented below.
 
 ## Binary
 
-- Package: `sat_cli` (Python).
-- Entry point in `pyproject.toml`: `console_scripts = sat-cli = sat_cli.cli:app`.
-- Help: `sat-cli --help`, `sat-cli <subcommand> --help`.
-- Version & contract: `sat-cli --version` (binary version),
-  `sat-cli --contract-version` (semver of this contract — `1.0.0` for v1).
+- Package: `aivg_cli` (Python; legacy alias package `sat_cli` for one release).
+- Entry point in `pyproject.toml`: `console_scripts = aivg = aivg_cli.cli:app  (legacy alias: sat-cli = sat_cli.cli:legacy_app)`.
+
+### Legacy binary alias (feature 012, one release)
+
+The pre-rebrand binary name `sat-cli` is kept as a console-script alias
+that dispatches to `aivg` with a one-line **stderr** deprecation notice
+(never stdout — JSON consumers stay clean). The dispatch is byte-
+equivalent: `sat-cli --json --version` writes the same envelope to
+stdout that `aivg --json --version` does. Use `aivg` directly in new
+scripts; the alias is removed in the release after feature 012.
+- Help: `aivg --help`, `aivg <subcommand> --help`.
+- Version & contract: `aivg --version` (binary version),
+  `aivg --contract-version` (semver of this contract — `1.0.0` for v1).
 
 ## Global flags
 
@@ -88,7 +97,7 @@ major bump.
 
 All commands accept `--json`. Output `data` shape is per command.
 
-### `sat-cli list`
+### `aivg list`
 
 List the fleet.
 
@@ -96,7 +105,7 @@ List the fleet.
 - JSON `data`: `DeviceSummary[]` from `management-api.yaml`.
 - Human: a one-line-per-device table; status dots agree with state colors.
 
-### `sat-cli watch`
+### `aivg watch`
 
 Long-running fleet/device watcher; emits one NDJSON envelope per change
 event (state_update, device added/removed, OTA progress) consumed from the
@@ -105,15 +114,15 @@ gateway's SSE state stream.
 - Flags: `--device DEVICE_ID` (default: whole fleet).
 - Exit: only on Ctrl+C, gateway loss (code 3), or signal.
 
-### `sat-cli device get DEVICE_ID`
+### `aivg device get DEVICE_ID`
 
 Full state of one device (`GET /satellite/{id}/state`).
 
-### `sat-cli device config get DEVICE_ID`
+### `aivg device config get DEVICE_ID`
 
 Running config (`GET /satellite/{id}/config`).
 
-### `sat-cli device config set DEVICE_ID --field VALUE ...`
+### `aivg device config set DEVICE_ID --field VALUE ...`
 
 Partial config update (`POST /satellite/{id}/config`).
 
@@ -122,12 +131,12 @@ Partial config update (`POST /satellite/{id}/config`).
 - Optional `--queue` to allow queueing if the device is offline (else
   `device_offline` is returned per FR-016).
 
-### `sat-cli device config schema DEVICE_ID`
+### `aivg device config schema DEVICE_ID`
 
 `GET /satellite/{id}/config/schema` — JSON Schema for editable fields.
 Used by skills/UI to know which fields exist.
 
-### `sat-cli device command DEVICE_ID VERB [--args JSON]`
+### `aivg device command DEVICE_ID VERB [--args JSON]`
 
 Send a command (`POST /satellite/{id}/command`). `VERB` is one of:
 `reboot`, `restart-voice`, `restart-manager`, `reset-config`,
@@ -137,22 +146,22 @@ Send a command (`POST /satellite/{id}/command`). `VERB` is one of:
   prompt unless `--yes` is passed (FR-019).
 - Maps to `CommandRequest { command, args }` over REST.
 
-### `sat-cli device delete DEVICE_ID`
+### `aivg device delete DEVICE_ID`
 
 Unpair (`DELETE /satellite/{id}`). Destructive — confirmation required
 unless `--yes`.
 
-### `sat-cli logs DEVICE_ID [--follow] [--level X] [--source S] [--since T]`
+### `aivg logs DEVICE_ID [--follow] [--level X] [--source S] [--since T]`
 
 Tail logs. Without `--follow`, prints recent entries and exits. With
 `--follow`, streams indefinitely (one NDJSON envelope per `LogEntry` under
 `--json`).
 
-### `sat-cli fleet logs [--follow] [--device D] [--level X] [--source S]`
+### `aivg fleet logs [--follow] [--device D] [--level X] [--source S]`
 
 Aggregate fleet log (`GET /satellite/logs`). Same flags as `logs`.
 
-### `sat-cli onboard [--ssid X --password Y] [--gateway URL] [--name N]`
+### `aivg onboard [--ssid X --password Y] [--gateway URL] [--name N]`
 
 Local Improv-over-BLE provisioning + adopt (R-2, FR-010). Steps:
 
@@ -169,26 +178,26 @@ Failure modes return specific exit codes (4 for BLE/Improv, others
 mapping to REST). Without `--name`, an interactive prompt collects it
 (skipped under `--json`/`--yes` which then requires `--name`).
 
-### `sat-cli ota check DEVICE_ID`
+### `aivg ota check DEVICE_ID`
 
 `POST /satellite/{id}/ota/check`. Browser device → `browser_not_ota_eligible`.
 
-### `sat-cli ota apply DEVICE_ID VERSION [--follow]`
+### `aivg ota apply DEVICE_ID VERSION [--follow]`
 
 `POST /satellite/{id}/ota/apply`. With `--follow`, attach to the device's
 log stream filtered to `source=ota` and emit each progress event as an
 NDJSON envelope until terminal state (success / failed / rolled_back).
 
-### `sat-cli ota manifest DEVICE_ID`
+### `aivg ota manifest DEVICE_ID`
 
 `GET /satellite/{id}/ota/manifest` — the device-type manifest.
 
 ## Help / version expectations
 
-- `sat-cli --help` and per-command `--help` print Typer's standard
+- `aivg --help` and per-command `--help` print Typer's standard
   usage; the help text is **part of the contract** insofar as flag names
   and required arguments are stable across v1.x.
-- `sat-cli --json --version` writes `{"ok":true,"data":{"version":"x.y.z","contract_version":"1.0.0"},"error":null,"v":1}`.
+- `aivg --json --version` writes `{"ok":true,"data":{"version":"x.y.z","contract_version":"1.0.0"},"error":null,"v":1}`.
 
 ## Versioning (R-13)
 
@@ -203,10 +212,10 @@ NDJSON envelope until terminal state (success / failed / rolled_back).
 
 ## Non-goals
 
-- `sat-cli` does **NOT** know which agent platform is active. Platform
+- `aivg` does **NOT** know which agent platform is active. Platform
   selection is server-side. Constitution v2.0.0 Principle IV: no
   `if platform == "hermes":` in the CLI.
-- `sat-cli` does **NOT** implement device-firmware OTA; it only initiates
+- `aivg` does **NOT** implement device-firmware OTA; it only initiates
   the gateway-orchestrated flow.
-- `sat-cli` does **NOT** speak the device control WS — it only consumes
+- `aivg` does **NOT** speak the device control WS — it only consumes
   REST + SSE.

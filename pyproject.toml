@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "satellite-core"
-version = "0.2.0"
-description = "Platform-agnostic voice-satellite management plane + CLI; Hermes is the v1 plugin (feature 011, constitution v2.0.0)"
+name = "aivg-core"
+version = "0.3.0"
+description = "AIVG — AI Voice Gateway: agent-platform-agnostic voice-satellite management plane + CLI; Hermes is the v1 plugin (constitution v2.0.1)"
 requires-python = ">=3.11"
 dependencies = [
     "aiortc>=1.6",
@@ -28,19 +28,25 @@ dev = [
 ]
 
 [project.scripts]
-sat-cli = "sat_cli.cli:app"
+aivg = "aivg_cli.cli:app"
+# Legacy alias — one-release compat (feature 012 FR-004). Dispatches to
+# `aivg` with one stderr deprecation notice per process. Removed in the
+# next release.
+sat-cli = "sat_cli.cli:legacy_app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["satellite_core*", "sat_cli*", "hermes_satellite_adapter*"]
+include = ["aivg_core*", "aivg_cli*", "satellite_core*", "sat_cli*", "hermes_satellite_adapter*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
 filterwarnings = [
-    # Silence the satellite_core compat-shim DeprecationWarning during tests.
+    # Silence compat-shim DeprecationWarnings during tests.
     "ignore:hermes_satellite_adapter is renamed:DeprecationWarning",
+    "ignore:satellite_core is renamed:DeprecationWarning",
+    "ignore:sat_cli is renamed:DeprecationWarning",
 ]
 
 [tool.ruff]

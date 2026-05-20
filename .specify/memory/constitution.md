@@ -1,6 +1,38 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 2.0.0 → 2.0.1
+Bump rationale: PATCH. Branding rebrand only — the product is renamed
+  from "Hermes Voice" to AIVG (AI Voice Gateway). Hermes remains the v1
+  agent-platform plugin per v2.0.0 Principle IV. No principle text gains
+  or loses normative meaning; verified by
+  tests/unit/test_constitution_principles_byte_equiv.py (feature 012
+  T034).
+
+Modified text:
+  - Title: "Hermes Voice Satellite Constitution" → "AIVG Constitution".
+  - Project-codename preface: now AIVG-first, with "Formerly 'Hermes
+    Voice' through feature 011" as historical context.
+  - Governance section: "Hermes Voice satellite system" → "AIVG
+    satellite system".
+  - Body prose: every product-name mention rewritten to AIVG; every
+    Hermes-as-plugin mention preserved verbatim.
+
+Templates / artifacts status:
+  - All Spec Kit templates ✅ unchanged (constitution-check text is
+    generic).
+  - feature 012 plan / research / data-model / contracts ✅ aligned
+    in lockstep with this amendment.
+  - The compat shims at `src/satellite_core/`, `src/sat_cli/`, and
+    `src/hermes_satellite_adapter/` remain for one release with their
+    own DeprecationWarnings.
+
+Follow-up TODOs: none. Compat-shim removal tracked in feature 012
+  T043 (`specs/012-aivg-branding/followup-shim-removal.md`).
+
+------------------------------------------------------------------
+SYNC IMPACT REPORT (previous)
+==================
 Version change: 1.0.0 → 2.0.0
 Bump rationale: MAJOR. Principle IV is **redefined** from a Hermes-specific
   "Reuse Hermes, Don't Rebuild" rule to a platform-neutral "Reuse the
@@ -48,11 +80,12 @@ Follow-up TODOs:
     skeleton in a follow-up feature; not part of 011's shipping scope.
 -->
 
-# Hermes Voice Satellite Constitution
+# AIVG Constitution
 
-*Project codename: "Hermes Voice" (historical). As of v2.0.0 the satellite
-system is **agent-platform-agnostic**: Hermes is the v1 reference plugin;
-other agent platforms plug in through Principle IV's seam.*
+*Project codename: **AIVG (AI Voice Gateway)**. Formerly "Hermes Voice"
+through feature 011; renamed in feature 012. The satellite system is
+**agent-platform-agnostic** (v2.0.0): Hermes is the v1 canonical
+plugin; other agent platforms plug in through Principle IV's seam.*
 
 ## Core Principles
 
@@ -241,7 +274,7 @@ Quality gates:
 
 ## Governance
 
-This constitution supersedes ad-hoc practices for the Hermes Voice satellite
+This constitution supersedes ad-hoc practices for the AIVG satellite
 system. The authoritative design source is
 `docs/generic-voice-satellite-design.md`; under v2.0.0 that document
 describes the **Hermes plugin** (the v1 canonical platform). The satellite
@@ -265,4 +298,4 @@ Compliance review:
   against the binding constraint that requires it; unjustified violations
   block the change.
 
-**Version**: 2.0.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-20
+**Version**: 2.0.1 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-20

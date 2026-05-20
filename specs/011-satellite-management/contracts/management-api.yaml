@@ -1,18 +1,19 @@
 openapi: 3.1.0
 info:
-  title: Hermes Satellite Management API
+  title: AIVG Satellite Management API
   version: 1.0.0
   description: |
-    Operator REST surface for the satellite fleet (design Appendix A).
-    Platform-agnostic per constitution v2.0.0 Principle IV: the active
-    agent platform plugin (v1: Hermes; planned: OpenClaw) is selected
-    server-side and is invisible to this contract.
-    Consumed by the platform-neutral `sat-cli` CLI, by per-platform agent
+    Operator REST surface for the AIVG (AI Voice Gateway) satellite
+    fleet (design Appendix A). Platform-agnostic per constitution v2.0.1
+    Principle IV: the active agent-platform plugin (v1 canonical:
+    Hermes; planned: OpenClaw) is selected server-side and is invisible
+    to this contract.
+    Consumed by the platform-neutral `aivg` CLI, by per-agent-platform
     skills (via the CLI), and by the optional web UI. The gateway↔device
     always-on control channel (`WS /satellite/ws`) is NOT documented here
     — see `management-ws.md`.
   contact:
-    name: Hermes Voice
+    name: AIVG
 servers:
   - url: http://{host}:{port}
     variables:

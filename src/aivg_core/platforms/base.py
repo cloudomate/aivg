@@ -3,7 +3,7 @@
 See ``specs/011-satellite-management/contracts/agent-platform.md``.
 
 This module is the **only** plugin-related symbol the satellite core
-imports. Concrete plugins live under ``satellite_core/platforms/<name>/``
+imports. Concrete plugins live under ``aivg_core/platforms/<name>/``
 and expose a module-level ``PLATFORM: AgentPlatform`` singleton. The
 loader selects one by name at startup via ``~/.satellite/config.yaml``
 ``platform:``; no other discovery mechanism in v1 (R-15).
@@ -11,7 +11,7 @@ loader selects one by name at startup via ``~/.satellite/config.yaml``
 Structural typing via ``typing.Protocol`` (PEP 544) means a plugin does
 NOT need to inherit from ``AgentPlatform`` — exposing the named methods
 is enough. Practical consequence: the existing
-:class:`satellite_core.platforms.hermes.bridge.HermesBridge` is already
+:class:`aivg_core.platforms.hermes.bridge.HermesBridge` is already
 structurally close; a thin ``HermesAgentPlatform`` adapter (in
 ``platforms/hermes/__init__.py``) renames its methods to the canonical
 ``AgentPlatform`` names so a single core can target both plugins.
@@ -76,7 +76,7 @@ class PluginRegistry:
 
     @staticmethod
     def load(name: str) -> AgentPlatform:
-        """Import ``satellite_core.platforms.<name>`` and return its
+        """Import ``aivg_core.platforms.<name>`` and return its
         module-level ``PLATFORM`` attribute. Raises a clear ``RuntimeError``
         on missing/misconfigured plugins."""
         if not name or not name.isidentifier():
@@ -85,11 +85,11 @@ class PluginRegistry:
                 f"identifier (e.g. 'hermes', 'openclaw')."
             )
         try:
-            module = importlib.import_module(f"satellite_core.platforms.{name}")
+            module = importlib.import_module(f"aivg_core.platforms.{name}")
         except ImportError as exc:
             raise RuntimeError(
                 f"Unknown agent platform {name!r}: "
-                f"satellite_core.platforms.{name} could not be imported "
+                f"aivg_core.platforms.{name} could not be imported "
                 f"({exc}). Available plugins: hermes, openclaw."
             ) from exc
         plat = getattr(module, "PLATFORM", None)

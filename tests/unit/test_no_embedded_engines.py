@@ -4,7 +4,7 @@ Fails if any STT/TTS engine or agent loop is imported anywhere in the
 satellite core EXCEPT the sanctioned Hermes-plugin bridge delegation seam.
 
 Under constitution v2.0.0 (feature 011) the bridge lives at
-``satellite_core/platforms/hermes/bridge.py``; the rest of ``satellite_core``
+``aivg_core/platforms/hermes/bridge.py``; the rest of ``aivg_core``
 (including ``platforms/openclaw/``) MUST NOT import a speech engine
 directly.
 """
@@ -12,7 +12,7 @@ directly.
 import pathlib
 import re
 
-PKG = pathlib.Path(__file__).resolve().parents[2] / "src" / "satellite_core"
+PKG = pathlib.Path(__file__).resolve().parents[2] / "src" / "aivg_core"
 BRIDGE_FILE = "bridge.py"  # only sanctioned seam (delegation only)
 FORBIDDEN = re.compile(
     r"\b(import\s+(whisper|faster_whisper|piper)|from\s+(whisper|faster_whisper|piper))\b"
@@ -33,7 +33,7 @@ def test_no_embedded_speech_engines_outside_bridge():
 
 def test_bridge_module_constructs_no_engine_on_import():
     # Importing the seam must perform zero engine construction.
-    import satellite_core.platforms.hermes.bridge as hb
+    import aivg_core.platforms.hermes.bridge as hb
 
     assert hasattr(hb, "HermesBridge")
     assert hasattr(hb, "AllProvidersUnavailable")

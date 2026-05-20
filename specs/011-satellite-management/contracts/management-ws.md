@@ -5,10 +5,11 @@
 [management-api.yaml](./management-api.yaml)
 
 This document specifies the **gateway↔device always-on control WebSocket**
-that satellites maintain independent of any voice call (constitution III).
-Operator surfaces (CLI / skills / optional UI) do **not** speak this
-protocol — they use the REST API in `management-api.yaml`. The WS is
-platform-agnostic per constitution v2.0.0 Principle IV.
+that AIVG (AI Voice Gateway) satellites maintain independent of any
+voice call (constitution III). Operator surfaces (`aivg` CLI /
+per-agent-platform skills / optional UI) do **not** speak this protocol
+— they use the REST API in `management-api.yaml`. The WS is
+platform-agnostic per constitution v2.0.1 Principle IV.
 
 ## Connection
 

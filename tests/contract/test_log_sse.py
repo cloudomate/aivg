@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from satellite_core.logsink import LogSink
-from satellite_core.management.log_sse import sse_logs
-from satellite_core.models import LogLevel, LogSource
+from aivg_core.logsink import LogSink
+from aivg_core.management.log_sse import sse_logs
+from aivg_core.models import LogLevel, LogSource
 
 
 def _parse(frame: str) -> dict:

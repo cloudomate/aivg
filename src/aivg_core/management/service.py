@@ -22,6 +22,13 @@ class ManagementService:
     def __init__(
         self, registry: Registry, sink: LogSink, cfg: SatelliteAdapterConfig
     ) -> None:
+        # Feature 012 T009: run the legacy ~/.satellite/ → ~/.aivg/
+        # one-shot migration before anything reads state.json. The
+        # function is idempotent via a process-level sentinel; calling
+        # it from every ManagementService construction is safe.
+        from ..persistence import migrate_legacy_data_dir  # noqa: WPS433
+        migrate_legacy_data_dir()
+
         self._reg = registry
         self._sink = sink
         self._cfg = cfg

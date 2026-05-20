@@ -1,7 +1,4 @@
-"""Agent-platform plugins (constitution v2.0.0 Principle IV).
+"""Compat-shim subpackage — forwards to :mod:`aivg_core.platforms`."""
 
-Each subpackage here ships one ``AgentPlatform`` implementation. The
-satellite core selects one at startup via ``~/.satellite/config.yaml``
-``platform:`` and does not import the others. The base ``AgentPlatform``
-Protocol arrives in Phase 2 of feature 011 at :mod:`.base`.
-"""
+from aivg_core.platforms import *  # noqa: F401,F403
+from aivg_core.platforms import base, hermes, openclaw  # noqa: F401

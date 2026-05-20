@@ -7,7 +7,7 @@ import array
 
 import pytest
 
-from satellite_core.platforms.hermes.bridge import HermesV013Bridge, SessionCtx
+from aivg_core.platforms.hermes.bridge import HermesV013Bridge, SessionCtx
 
 pytestmark = pytest.mark.asyncio
 

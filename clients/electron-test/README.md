@@ -1,8 +1,9 @@
-# Hermes Satellite — Electron Test Client (feature 003)
+# AIVG Satellite — Electron Test Client (feature 003)
 
-Minimal satellite-#3 client to live-test the **deployed** Hermes voice
-adapter. Does no STT/TTS/agent (constitution I) — only mic capture, WebRTC
-transport, and playback (Chromium AEC3 handles local echo).
+Minimal satellite-#3 client to live-test the **deployed** AIVG voice
+adapter (running the Hermes platform plugin). Does no STT/TTS/agent
+(constitution I) — only mic capture, WebRTC transport, and playback
+(Chromium AEC3 handles local echo).
 
 ## Use
 

@@ -9,7 +9,7 @@ remainder carry-over, and silence-padded flush — lives in
 
 import pytest
 
-from satellite_core.webrtc.media import PcmFramer, frame_bytes
+from aivg_core.webrtc.media import PcmFramer, frame_bytes
 
 FRAME = 1920  # 20 ms, 48 kHz, mono, s16 (= 960 samples * 2 bytes)
 

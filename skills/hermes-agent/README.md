@@ -1,7 +1,8 @@
-# Hermes-platform satellite management skill
+# Hermes-platform AIVG satellite-management skill
 
-v1 canonical agent-platform skill (constitution v2.0.0 Principle IV).
-Drives the platform-neutral `sat-cli` binary on the operator's host.
+v1 canonical agent-platform skill for **AIVG (AI Voice Gateway)**
+(constitution v2.0.1 Principle IV). Drives the platform-neutral `aivg`
+binary on the operator's host.
 
 ## Install
 
@@ -16,20 +17,23 @@ The Hermes agent will pick up the skill on its next config reload.
 
 ## Prerequisites
 
-- `sat-cli` is installed and on `PATH`. From this repo:
+- `aivg` is installed and on `PATH`. From this repo:
   ```bash
   pip install -e .
-  sat-cli --contract-version   # expect 1.0.0
+  aivg --contract-version   # expect 1.0.0
   ```
-- A satellite gateway is reachable (default `http://localhost:8643`).
-  Override via `SAT_GATEWAY_URL` or `sat-cli --gateway ...`.
+- An AIVG gateway is reachable (default `http://localhost:8643`).
+  Override via `SAT_GATEWAY_URL` or `aivg --gateway ...`.
 - For onboarding: a BLE-capable host (macOS or Linux). Install the BLE
   extra: `pip install -e '.[ble]'`.
 
+The legacy binary `sat-cli` still works for one release as a
+deprecation-warned alias; new automation should use `aivg`.
+
 ## What this skill does NOT do
 
-- Talk to the gateway over REST itself — it shells out to `sat-cli`.
-- Embed any Hermes-specific transport — the same `sat-cli` is used by
+- Talk to the gateway over REST itself — it shells out to `aivg`.
+- Embed any Hermes-specific transport — the same `aivg` is used by
   the OpenClaw-platform skill (planned) without modification.
 - Auto-confirm destructive actions; the agent must ask the user first.
 

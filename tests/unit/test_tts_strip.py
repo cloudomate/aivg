@@ -24,7 +24,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from satellite_core.platforms.hermes.bridge import (
+from aivg_core.platforms.hermes.bridge import (
     AllProvidersUnavailable,
     HermesV013Bridge,
     SessionCtx,

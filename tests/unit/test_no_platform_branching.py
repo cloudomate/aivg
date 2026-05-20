@@ -1,19 +1,19 @@
 """Constitution v2.0.0 Principle IV gate (feature 011 T015).
 
-Scans ``src/satellite_core/`` for any concrete-platform import outside
-``src/satellite_core/platforms/``. The core MUST NOT mention a specific
+Scans ``src/aivg_core/`` for any concrete-platform import outside
+``src/aivg_core/platforms/``. The core MUST NOT mention a specific
 plugin name — platform selection happens at runtime via
-:class:`satellite_core.platforms.base.PluginRegistry`.
+:class:`aivg_core.platforms.base.PluginRegistry`.
 
 Phase 2 transitional exemption
 ------------------------------
 
 A handful of modules (``adapter.py``, ``webrtc/session.py``,
 ``webrtc/signaling.py``) still import directly from
-``satellite_core.platforms.hermes.bridge`` because they were written
+``aivg_core.platforms.hermes.bridge`` because they were written
 pre-v2.0.0 against the concrete :class:`HermesBridge`. Until the
 follow-up phase rewires them to depend on
-:class:`satellite_core.platforms.base.AgentPlatform`, those callsites
+:class:`aivg_core.platforms.base.AgentPlatform`, those callsites
 each carry a ``# AgentPlatform-coupling-TODO`` marker on the import line,
 and this test exempts marker-tagged lines. New code that introduces a
 concrete-plugin import without the marker fails this test.
@@ -24,12 +24,12 @@ from __future__ import annotations
 import pathlib
 import re
 
-CORE = pathlib.Path(__file__).resolve().parents[2] / "src" / "satellite_core"
+CORE = pathlib.Path(__file__).resolve().parents[2] / "src" / "aivg_core"
 PLATFORMS = CORE / "platforms"
 
 # Lines mentioning a concrete plugin import.
 PATTERN = re.compile(
-    r"^\s*(from|import)\s+satellite_core\.platforms\.(hermes|openclaw)\b"
+    r"^\s*(from|import)\s+aivg_core\.platforms\.(hermes|openclaw)\b"
 )
 EXEMPT_MARKER = "AgentPlatform-coupling-TODO"
 
@@ -53,7 +53,7 @@ def test_no_concrete_plugin_import_in_core() -> None:
                 continue  # transitional, tracked for follow-up
             offenders.append(f"{py.relative_to(CORE.parent.parent)}:{lineno}: {line.strip()}")
     assert offenders == [], (
-        "Concrete-plugin imports outside satellite_core/platforms/ "
+        "Concrete-plugin imports outside aivg_core/platforms/ "
         "(constitution v2.0.0 Principle IV). Add # AgentPlatform-coupling-TODO "
         "on the import line if this is a tracked transitional coupling.\n"
         + "\n".join(offenders)

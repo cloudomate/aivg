@@ -1,7 +1,7 @@
 """``httpx``-based REST client for the satellite management plane.
 
 Maps network/HTTP failures onto the closed ``error.code`` set documented
-in :mod:`sat_cli.exit_codes` (R-9). All callers see the typed envelope
+in :mod:`aivg_cli.exit_codes` (R-9). All callers see the typed envelope
 shape; no raw exceptions cross the public surface.
 """
 

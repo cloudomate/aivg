@@ -8,10 +8,10 @@ injected transport factory.
 
 import pytest
 
-from satellite_core.config import SatelliteAdapterConfig
-from satellite_core.logsink import LogSink
-from satellite_core.registry import Registry
-from satellite_core.webrtc.signaling import SignalingService
+from aivg_core.config import SatelliteAdapterConfig
+from aivg_core.logsink import LogSink
+from aivg_core.registry import Registry
+from aivg_core.webrtc.signaling import SignalingService
 
 pytestmark = pytest.mark.asyncio
 

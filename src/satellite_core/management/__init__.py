@@ -1,11 +1,5 @@
-"""Management plane subpackage (design Appendix A).
+"""Compat-shim — forwards to :mod:`aivg_core.management`."""
 
-``ManagementService`` and ``build_management_app`` live in :mod:`.service`
-for now; feature 011 Phase 2/3 will split out ``app.py`` (route wiring),
-``adopt.py``, ``command.py``, ``ota.py``, and ``log_sse.py`` as new
-operator endpoints land.
-"""
-
-from .service import ManagementService, build_management_app
-
-__all__ = ["ManagementService", "build_management_app"]
+from aivg_core.management import *  # noqa: F401,F403
+from aivg_core.management import ManagementService, build_management_app  # noqa: F401
+from aivg_core.management import service  # noqa: F401

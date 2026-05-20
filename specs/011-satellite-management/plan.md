@@ -292,6 +292,10 @@ The optional web UI (spec FR-009) is deferred.
 **Migration of the existing `hermes_satellite_adapter` package** is part
 of this plan's task list, not a separate refactor:
 
+> **Note**: superseded in feature 012 by `aivg_core` / `aivg_cli`; the
+> `satellite_core` and `sat_cli` paths in this table now become compat
+> shims themselves. See [../012-aivg-branding/plan.md](../012-aivg-branding/plan.md).
+
 | Old path | New path |
 |---|---|
 | `src/hermes_satellite_adapter/adapter.py` | `src/satellite_core/adapter.py` |

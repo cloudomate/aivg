@@ -9,13 +9,13 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncIterator, Optional
 
-from satellite_core.platforms.hermes.bridge import (
+from aivg_core.platforms.hermes.bridge import (
     AgentReply,
     AllProvidersUnavailable,
     EndpointSignal,
     SessionCtx,
 )
-from satellite_core.webrtc.session import MediaTransport
+from aivg_core.webrtc.session import MediaTransport
 
 EOU = b"<EOU>"
 SPEECH = b"<SPEECH>"

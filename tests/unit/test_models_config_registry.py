@@ -1,11 +1,11 @@
-from satellite_core.config import SatelliteAdapterConfig
-from satellite_core.models import (
+from aivg_core.config import SatelliteAdapterConfig
+from aivg_core.models import (
     ClientStatus,
     ConversationTurn,
     SatelliteConfig,
     SessionState,
 )
-from satellite_core.registry import Registry
+from aivg_core.registry import Registry
 
 
 def test_satellite_config_defaults_match_appendix_b():
@@ -29,7 +29,7 @@ def test_adapter_config_rejects_equal_ports():
 
 
 def test_mini_yaml_parses_satellite_block(tmp_path):
-    from satellite_core.config import load_adapter_config
+    from aivg_core.config import load_adapter_config
 
     p = tmp_path / "config.yaml"
     p.write_text(

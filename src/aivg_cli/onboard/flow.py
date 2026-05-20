@@ -9,7 +9,7 @@ Glues the local Improv-over-BLE step to the gateway's REST surface:
 
 Each phase emits a typed progress event the CLI surfaces as NDJSON under
 ``--json``. Failures are mapped to stable ``error.code`` values
-documented in :mod:`sat_cli.exit_codes`.
+documented in :mod:`aivg_cli.exit_codes`.
 """
 
 from __future__ import annotations

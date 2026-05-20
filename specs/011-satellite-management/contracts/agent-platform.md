@@ -6,13 +6,13 @@
 `AgentPlatform` is the seam that makes the satellite system
 **agent-platform-agnostic** (constitution v2.0.0). The satellite core never
 imports a specific platform; it loads one `AgentPlatform` implementation by
-name from `~/.satellite/config.yaml`'s `platform:` key and uses only this
+name from `~/.aivg/config.yaml`'s `platform:` key and uses only this
 interface.
 
 ## Location
 
 ```text
-src/satellite_core/platforms/
+src/aivg_core/platforms/
 ├── base.py                  # the AgentPlatform Protocol + PluginRegistry
 ├── hermes/                  # v1 canonical implementation
 │   └── __init__.py          # exposes PLATFORM: AgentPlatform
@@ -75,7 +75,7 @@ class AgentPlatform(Protocol):
 
 ## Loading
 
-Selected in `~/.satellite/config.yaml`:
+Selected in `~/.aivg/config.yaml`:
 
 ```yaml
 platform: hermes        # or "openclaw" once implemented
@@ -86,25 +86,25 @@ satellite:
   heartbeat_interval: 30
 ```
 
-`satellite_core.config.load_config()` reads `platform`, imports
-`satellite_core.platforms.<name>` dynamically, and exposes
+`aivg_core.config.load_config()` reads `platform`, imports
+`aivg_core.platforms.<name>` dynamically, and exposes
 `module.PLATFORM` as the singleton `AgentPlatform` instance used by the
 voice/management code. **No fallback / no auto-discovery** in v1 — an
 unknown `platform:` value is a fatal startup error with a clear message.
 
 ## Plugin contract (rules the satellite core enforces)
 
-1. **Module exposure**: `satellite_core.platforms.<name>` MUST expose a
+1. **Module exposure**: `aivg_core.platforms.<name>` MUST expose a
    module-level attribute `PLATFORM: AgentPlatform`. Asserted in
    `tests/unit/test_agent_platform_contract.py`.
 2. **Name attribute**: `PLATFORM.name == "<name>"` MUST hold.
 3. **No cross-platform imports**: a platform plugin MUST NOT import
    another plugin. Asserted by static check in
    `tests/unit/test_no_platform_branching.py`.
-4. **No platform imports from the core**: `satellite_core/` (excluding
-   `satellite_core/platforms/`) MUST NOT contain any
-   `import satellite_core.platforms.hermes` or
-   `import satellite_core.platforms.openclaw` (or any other concrete
+4. **No platform imports from the core**: `aivg_core/` (excluding
+   `aivg_core/platforms/`) MUST NOT contain any
+   `import aivg_core.platforms.hermes` or
+   `import aivg_core.platforms.openclaw` (or any other concrete
    plugin). Asserted by the same static check.
 5. **Type independence**: a plugin's return types are stdlib primitives
    (`bytes`, `str`, `AsyncIterator[str]`, `bool`). Plugin-internal types
@@ -124,7 +124,7 @@ unknown `platform:` value is a fatal startup error with a clear message.
 selected via a test-only `platform: echo` config) that returns
 deterministic strings, runs the full voice loop end-to-end through it
 *without any Hermes-specific module ever being imported*, and asserts
-`sys.modules` has no `satellite_core.platforms.hermes*` entries.
+`sys.modules` has no `aivg_core.platforms.hermes*` entries.
 
 This is the binding gate for constitution v2.0.0 Principle IV.
 

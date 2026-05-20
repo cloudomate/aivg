@@ -1,6 +1,6 @@
 """Integration: ``sat-cli`` onboard flow (feature 011 T042, US2).
 
-Exercises the full orchestrator from :mod:`sat_cli.onboard.flow` against:
+Exercises the full orchestrator from :mod:`aivg_cli.onboard.flow` against:
 
 * a **mocked BLE peripheral** (the ``ble_client_factory`` hook) that
   reports a fixed device-id back over Improv;
@@ -22,11 +22,11 @@ import aiohttp
 import pytest
 from aiohttp import web
 
-from satellite_core.config import SatelliteAdapterConfig
-from satellite_core.logsink import LogSink
-from satellite_core.management.service import ManagementService, build_management_app
-from satellite_core.registry import Registry
-from sat_cli.onboard.flow import (
+from aivg_core.config import SatelliteAdapterConfig
+from aivg_core.logsink import LogSink
+from aivg_core.management.service import ManagementService, build_management_app
+from aivg_core.registry import Registry
+from aivg_cli.onboard.flow import (
     OnboardError,
     OnboardProgress,
     OnboardResult,
@@ -45,7 +45,7 @@ class _FakeImprovPeer:
 
 
 class _FakeImprovClient:
-    """Replaces :class:`sat_cli.onboard.improv_ble.ImprovBleClient`.
+    """Replaces :class:`aivg_cli.onboard.improv_ble.ImprovBleClient`.
 
     The ``post_register`` callable is invoked just before
     :meth:`send_wifi` returns — that's the moment the real device would

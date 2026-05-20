@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from sat_cli.onboard.improv_ble import (
+from aivg_cli.onboard.improv_ble import (
     BleUnavailable,
     ImprovError,
     ImprovError_,

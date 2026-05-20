@@ -7,10 +7,10 @@ once the configured ``device_limit`` is reached.
 
 from __future__ import annotations
 
-from satellite_core.config import SatelliteAdapterConfig
-from satellite_core.logsink import LogSink
-from satellite_core.management import ManagementService
-from satellite_core.registry import Registry
+from aivg_core.config import SatelliteAdapterConfig
+from aivg_core.logsink import LogSink
+from aivg_core.management import ManagementService
+from aivg_core.registry import Registry
 
 
 def _svc(tmp_path, *, device_limit):

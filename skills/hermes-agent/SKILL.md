@@ -1,17 +1,21 @@
 ---
 name: satellite-management
-description: Manage the Hermes voice satellite fleet from the Hermes agent — onboard, list, configure, command, OTA — by invoking the platform-neutral `sat-cli` binary. v1 Hermes-platform skill (constitution v2.0.0).
-version: 0.1.0
+description: Manage the AIVG (AI Voice Gateway) satellite fleet from the Hermes agent — onboard, list, configure, command, OTA — by invoking the platform-neutral `aivg` binary. v1 Hermes-platform skill for AIVG (constitution v2.0.1).
+version: 0.2.0
 license: MIT
 ---
 
 # Satellite management
 
-This skill lets a Hermes agent operate the satellite management plane
-through the platform-neutral **`sat-cli`** binary (feature 011). The CLI
-is the **single execution surface** — the skill does not call REST
-directly. Other agent platforms (e.g. OpenClaw) ship the same shape of
-skill in their own plugin folder; the underlying `sat-cli` is shared.
+This skill lets a Hermes agent operate the **AIVG (AI Voice Gateway)**
+management plane through the platform-neutral **`aivg`** binary
+(features 011 and 012). The CLI is the **single execution surface** —
+the skill does not call REST directly. Other agent platforms (e.g.
+OpenClaw) ship the same shape of skill in their own plugin folder; the
+underlying `aivg` is shared.
+
+> The legacy binary `sat-cli` still works for one release (deprecation
+> notice on stderr). New scripts should use `aivg` directly.
 
 ## When to use this skill
 
@@ -49,25 +53,25 @@ Exit codes (R-9): `0` ok, `1` user/config error, `2` device offline,
 ### 1. Fleet visibility (US1 — MVP)
 
 ```bash
-sat-cli --json list
-sat-cli --json list --state pending
-sat-cli --json device get kitchen
-sat-cli --json logs kitchen --level WARN
+aivg --json list
+aivg --json list --state pending
+aivg --json device get kitchen
+aivg --json logs kitchen --level WARN
 ```
 
 User says: *"is the fleet healthy?"*
-→ `sat-cli --json list` and report any device with `status != "online"`
+→ `aivg --json list` and report any device with `status != "online"`
 or `ota_state` in `{"failed","rolled_back"}` or a name in the pending
 list waiting to be adopted.
 
 User says: *"what's the kitchen satellite doing right now?"*
-→ `sat-cli --json device get kitchen`; report `session.state` (idle /
+→ `aivg --json device get kitchen`; report `session.state` (idle /
 listening / thinking / speaking) and `ota_state`.
 
 ### 2. Onboarding (US2 — Improv-over-BLE)
 
 ```bash
-sat-cli --json onboard --ssid "MyWiFi" --password "..." --name "bedroom"
+aivg --json onboard --ssid "MyWiFi" --password "..." --name "bedroom"
 ```
 
 This is host-side (BLE) and may take ~30 s to ~5 min. Stream NDJSON
@@ -76,8 +80,8 @@ phases; report `error.code` on failure.
 ### 3. Configuration (US3)
 
 ```bash
-sat-cli --json device config get kitchen
-sat-cli --json device config set kitchen --field wake_word=hey_jarvis
+aivg --json device config get kitchen
+aivg --json device config set kitchen --field wake_word=hey_jarvis
 ```
 
 Confirm the new running value from the response, not from the request.
@@ -85,8 +89,8 @@ Confirm the new running value from the response, not from the request.
 ### 4. OTA (US4)
 
 ```bash
-sat-cli --json ota check kitchen
-sat-cli --json ota apply kitchen 0.2.0 --follow
+aivg --json ota check kitchen
+aivg --json ota apply kitchen 0.2.0 --follow
 ```
 
 Browser devices return `browser_not_ota_eligible` — surface this clearly
@@ -95,8 +99,8 @@ Browser devices return `browser_not_ota_eligible` — surface this clearly
 ### 5. Diagnostics (US5)
 
 ```bash
-sat-cli --json device command kitchen identify --yes
-sat-cli --json logs kitchen --follow --source webrtc --level WARN
+aivg --json device command kitchen identify --yes
+aivg --json logs kitchen --follow --source webrtc --level WARN
 ```
 
 Destructive verbs (`factory-reset`, `device delete`) MUST be confirmed

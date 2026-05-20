@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 
-from satellite_core.models import (
+from aivg_core.models import (
     AdoptionState,
     ClientStatus,
     ConnectedClient,
     OtaState,
     SatelliteConfig,
 )
-from satellite_core import persistence
+from aivg_core import persistence
 
 
 @pytest.fixture

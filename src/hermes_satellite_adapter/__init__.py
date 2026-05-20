@@ -1,47 +1,53 @@
-"""Compatibility shim. Renamed to :mod:`satellite_core` in feature 011.
+"""Compatibility shim. Renamed twice — now :mod:`aivg_core`.
 
-Under constitution v2.0.0 the satellite system is **agent-platform-
-agnostic**; the package was renamed from ``hermes_satellite_adapter`` to
-``satellite_core`` and the Hermes-specific code moved to
-``satellite_core.platforms.hermes`` (the v1 canonical plugin).
+History:
+``hermes_satellite_adapter`` (pre-feature-011) → ``satellite_core``
+(feature 011 — the satellite system became agent-platform-agnostic) →
+``aivg_core`` (feature 012 — the AIVG rebrand). This file is the
+**two-hop** compat shim that forwards directly to ``aivg_core``,
+skipping the intermediate ``satellite_core`` name.
 
-This shim re-exports the public surface from the new locations and emits a
-:class:`DeprecationWarning` so any external consumer (or any straggler in
-this repo) gets a one-release window to migrate. Scheduled for deletion in
-feature 011 Phase 8 task **T081**.
+Emits one :class:`DeprecationWarning` per process (cached on
+``sys.__dict__``). Scheduled for deletion in the release after
+feature 012.
 """
 
 from __future__ import annotations
 
+import sys as _sys
 import warnings as _warnings
 
-_warnings.warn(
-    "hermes_satellite_adapter is renamed to satellite_core (feature 011, "
-    "constitution v2.0.0). Update imports to satellite_core.* — the Hermes "
-    "bridge lives at satellite_core.platforms.hermes.bridge. This shim is "
-    "removed in Phase 8 (T081).",
-    DeprecationWarning,
-    stacklevel=2,
-)
+if "_aivg_hermes_satellite_adapter_shim_warned" not in _sys.__dict__:
+    _warnings.warn(
+        "hermes_satellite_adapter is renamed to aivg_core (feature 012, "
+        "AIVG rebrand; first renamed to satellite_core in feature 011). "
+        "Update imports to aivg_core.* — the Hermes-plugin bridge lives "
+        "at aivg_core.platforms.hermes.bridge. This shim is removed in "
+        "the next release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _sys.__dict__["_aivg_hermes_satellite_adapter_shim_warned"] = True
 
 # Module re-exports (so `from hermes_satellite_adapter.X import Y` still works).
-from satellite_core import (  # noqa: F401,E402  pragma: no cover
+from aivg_core import (  # noqa: F401,E402  pragma: no cover
     adapter,
     config,
     logsink,
     models,
+    persistence,
     registry,
     turnlatency,
 )
-from satellite_core import management  # noqa: F401,E402
-from satellite_core.webrtc import (  # noqa: F401,E402
+from aivg_core import management  # noqa: F401,E402
+from aivg_core.webrtc import (  # noqa: F401,E402
     media,
     session,
     signaling,
     streamasm,
     textseg,
 )
-from satellite_core.platforms.hermes import bridge as hermes_bridge  # noqa: F401,E402
+from aivg_core.platforms.hermes import bridge as hermes_bridge  # noqa: F401,E402
 
 __all__ = [
     "adapter",
@@ -49,6 +55,7 @@ __all__ = [
     "logsink",
     "management",
     "models",
+    "persistence",
     "registry",
     "turnlatency",
     "media",
@@ -58,4 +65,4 @@ __all__ = [
     "textseg",
     "hermes_bridge",
 ]
-__version__ = "0.2.0-shim"
+__version__ = "0.3.0-shim"

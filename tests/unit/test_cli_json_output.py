@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from sat_cli import output
+from aivg_cli import output
 
 
 def _last_json_line(captured_stdout: str) -> dict:
@@ -61,7 +61,7 @@ def test_envelope_version_is_v1(capsys):
 def test_error_code_set_is_documented_in_cli_contract():
     """Sanity: every code the CLI emits should appear in the exit_codes
     mapping. Catches accidental new codes that nothing maps."""
-    from sat_cli.exit_codes import _ERROR_CODE_TO_EXIT
+    from aivg_cli.exit_codes import _ERROR_CODE_TO_EXIT
 
     documented = set(_ERROR_CODE_TO_EXIT.keys())
     emitted = {

@@ -1,4 +1,4 @@
-"""SSE iterator over :class:`satellite_core.logsink.LogSink` (feature 011 T026).
+"""SSE iterator over :class:`aivg_core.logsink.LogSink` (feature 011 T026).
 
 Emits one ``data: {json}\\n\\n`` line per :class:`LogEntry`. First yields
 the buffered backlog matching the filters, then live-subscribes for new

@@ -59,7 +59,7 @@ class ImprovRpcCommand(enum.IntEnum):
     GET_WIFI_NETWORKS = 0x05
 
 
-# --- typed local exceptions (mapped to error.code by sat_cli) -------------
+# --- typed local exceptions (mapped to error.code by aivg_cli) -------------
 
 
 class ImprovError_(Exception):

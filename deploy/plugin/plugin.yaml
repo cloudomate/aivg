@@ -1,15 +1,17 @@
 name: satellite-webrtc-platform
-label: Satellite WebRTC
+label: AIVG Satellite WebRTC
 kind: platform
 version: 0.1.0
 description: >
-  Realtime voice satellite gateway adapter for Hermes Agent. Bridges a
-  WebRTC voice client (browser/Electron/RPi/ESP32) to Hermes's existing
-  STT / agent / TTS via the gateway's provider layer. Thin transport +
-  registry only — no embedded speech intelligence (project constitution I).
-author: hermes-voice-gateway (feature 003)
-# Optional env knobs; the satellite: block in ~/.hermes/config.yaml is the
-# primary configuration surface (constitution IV — existing loader reused).
+  Realtime voice satellite gateway adapter — AIVG (AI Voice Gateway)
+  running its Hermes platform plugin. Bridges a WebRTC voice client
+  (browser/Electron/RPi/ESP32) to the configured agent platform's
+  STT / agent / TTS via that platform's provider layer. Thin transport
+  + registry only — no embedded speech intelligence (constitution I).
+author: aivg-voice-gateway (feature 003; rebranded in feature 012)
+# Optional env knobs; the satellite: block in ~/.aivg/config.yaml is the
+# primary configuration surface (constitution IV). The Hermes-plugin
+# reuse of ~/.hermes/ is handled by the plugin itself, not this adapter.
 optional_env:
   - name: SATELLITE_MGMT_PORT
     description: "Management/control-plane port (default 8643)"
