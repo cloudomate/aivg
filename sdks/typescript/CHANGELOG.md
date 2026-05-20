@@ -5,6 +5,35 @@ All notable changes to `@aivg/sat-sdk` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-05-20
+
+### Fixed
+
+- **Signaling URL was using the wrong port** — POST `/webrtc/offer`
+  went to the management plane (8643) instead of the WebRTC signaling
+  plane (8644), 404ing every voice session. Added a separate
+  `signalingUrl` field to `SatelliteOptions`; defaults to `gatewayUrl`
+  with the port bumped by +1 (matches the gateway's `management_port` /
+  `webrtc_port` default convention from `aivg_core/config.py`).
+- **`/webrtc/offer` response shape** — the gateway returns
+  `{sdp, type: "answer"}` only; the SDK was demanding `session_id`
+  too and rejecting the response with `signaling_failed`. SDK now
+  fabricates a local session_id when the gateway doesn't supply one.
+- **Three more unknown WS message types** the gateway emits over
+  the control-plane:
+    * `state` — per-session FSM transition (`idle | listening |
+      thinking | speaking | …`). Surfaced as a new `gateway_state`
+      bus event (distinct from the SDK's own local FSM `state`).
+    * `partial_transcript` — live ASR text. Routed to the existing
+      `transcript` event as a non-final `speaker: "user"` delta.
+    * `barge_in` — gateway-detected barge-in. New `barge_in` event.
+  None of these trigger `transient_error` warnings anymore.
+
+### Internal
+
+- Tests: 148 passing (added one for the new offer-shape forgiveness;
+  retired one that asserted the old over-strict response validation).
+
 ## [0.1.1] — 2026-05-20
 
 ### Fixed

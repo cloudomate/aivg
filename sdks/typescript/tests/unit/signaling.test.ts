@@ -38,10 +38,21 @@ describe("Signaling.postOffer", () => {
     });
   });
 
-  it("response missing required fields → signaling_failed", async () => {
+  it("response without session_id → SDK fabricates one (real-gateway-shape parity)", async () => {
     const fetchFn = vi.fn(
       async () =>
         new Response(JSON.stringify({ sdp: "v=0", type: "answer" }), { status: 200 }),
+    ) as unknown as typeof fetch;
+    const s = new Signaling({ gatewayUrl: "http://gw", fetchFn });
+    const out = await s.postOffer({ deviceId: "d1", sdp: "v=0" });
+    expect(out.sdp).toBe("v=0");
+    expect(out.type).toBe("answer");
+    expect(out.session_id).toMatch(/^local-/); // fabricated
+  });
+
+  it("response without `sdp` or with wrong `type` → signaling_failed", async () => {
+    const fetchFn = vi.fn(
+      async () => new Response(JSON.stringify({ type: "offer" }), { status: 200 }),
     ) as unknown as typeof fetch;
     const s = new Signaling({ gatewayUrl: "http://gw", fetchFn });
     await expect(s.postOffer({ deviceId: "d1", sdp: "v=0" })).rejects.toMatchObject({

@@ -45,7 +45,19 @@ export interface ReconnectPolicy {
 }
 
 export interface SatelliteOptions {
+  /**
+   * Management plane URL (REST + WS) — e.g. `http://localhost:8643`.
+   * Hosts `/satellite/...` REST endpoints + `/satellite/ws`.
+   */
   gatewayUrl: string;
+  /**
+   * WebRTC signaling URL — e.g. `http://localhost:8644`. Hosts
+   * `/webrtc/offer` and `/webrtc/candidate`. Defaults to `gatewayUrl`
+   * with the port bumped by +1 (matches the gateway's
+   * `management_port` / `webrtc_port` default convention; see
+   * `aivg_core/config.py`).
+   */
+  signalingUrl?: string;
   deviceId: string;
   deviceName?: string;
   deviceType: "browser" | "electron" | "node" | "rpi" | "esp32" | "custom";
@@ -76,6 +88,8 @@ export class Satellite {
   private readonly cp: ControlPlane;
   private readonly adoption: AdoptionTracker = new AdoptionTracker();
   private readonly configClient: ConfigClient;
+  /** WebRTC signaling URL — separate from gatewayUrl. */
+  private readonly signalingUrl: string;
   private currentState: SatelliteState = "idle";
   private currentSession: InternalVoiceSession | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -88,6 +102,9 @@ export class Satellite {
     const opts: SatelliteOptions = { ...options };
     this.options = Object.freeze(opts) as typeof this.options;
     this.mixedContentError = checkMixedContent(opts.gatewayUrl);
+    // signalingUrl defaults to gatewayUrl with port +1 (gateway's
+    // management_port/webrtc_port convention).
+    this.signalingUrl = opts.signalingUrl ?? deriveSignalingUrl(opts.gatewayUrl);
 
     // Attach adoption tracker BEFORE the control plane subscribes so
     // its re-emit lands at the top of the listener queue and consumers
@@ -215,7 +232,7 @@ export class Satellite {
       );
     }
     const session = new InternalVoiceSession({
-      gatewayUrl: this.options.gatewayUrl,
+      gatewayUrl: this.signalingUrl,
       deviceId: this.options.deviceId,
       bus: this.bus,
       webrtcFactory: this.options.webrtcFactory ?? defaultWebrtcFactory,
@@ -278,6 +295,25 @@ export class Satellite {
       this.currentState = current;
       this.bus.emit("state", { previous, current });
     }
+  }
+}
+
+/**
+ * Derive the WebRTC signaling URL from the management gatewayUrl by
+ * bumping the port +1. Matches the gateway's `management_port` (8643)
+ * / `webrtc_port` (8644) default convention from `aivg_core/config.py`.
+ *
+ * Consumers with non-default gateway layouts should pass `signalingUrl`
+ * explicitly in SatelliteOptions instead.
+ */
+function deriveSignalingUrl(gatewayUrl: string): string {
+  try {
+    const u = new URL(gatewayUrl);
+    const port = Number(u.port || (u.protocol === "https:" ? 443 : 80));
+    u.port = String(port + 1);
+    return u.origin;
+  } catch {
+    return gatewayUrl;
   }
 }
 

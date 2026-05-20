@@ -76,13 +76,16 @@ export class Signaling {
       throw sdkError("signaling_failed", `POST ${url} non-JSON response`, err);
     }
     // Light shape check — full validation is the gateway's job (R-8).
+    // The gateway returns `{ sdp, type: "answer" }` only; session_id
+    // is reserved on our side (not echoed by the gateway today).
     const obj = payload as Partial<OfferResponse>;
-    if (
-      typeof obj.sdp !== "string" ||
-      obj.type !== "answer" ||
-      typeof obj.session_id !== "string"
-    ) {
+    if (typeof obj.sdp !== "string" || obj.type !== "answer") {
       throw sdkError("signaling_failed", `POST ${url} bad response shape`, payload);
+    }
+    // Fabricate a session_id if the gateway didn't supply one so the
+    // public VoiceSession.sessionId is always populated.
+    if (typeof obj.session_id !== "string") {
+      obj.session_id = `local-${Date.now().toString(36)}`;
     }
     return obj as OfferResponse;
   }

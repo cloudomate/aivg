@@ -16,7 +16,13 @@ function start() {
     deviceId: DEVICE_ID, deviceName: DEVICE_ID,
     deviceType: "electron", firmwareVersion: "0.2.0",
   });
-  sat.on("adoption", (e) => log(`adoption: ${e.state}${e.firstApproval ? " ✓" : ""}`));
+  sat.on("adoption", (e) => {
+    log(`adoption: ${e.state}${e.firstApproval ? " ✓" : ""}`);
+    // Belt-and-suspenders: the button is also enabled on connect()
+    // resolve below, but the first adoption event is the strictly-stronger
+    // signal that the gateway has us registered.
+    if (e.state === "adopted") $("ptt").disabled = false;
+  });
   sat.on("state", (e) => {
     $("state").textContent = e.current;
     if (e.previous === "listening" && e.current === "speaking" && eosAt) {

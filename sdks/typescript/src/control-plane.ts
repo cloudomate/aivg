@@ -408,6 +408,33 @@ export class ControlPlane {
         // one transient_error per session per R-8.
         this.agentDispatch.dispatch(this.opts.bus, msg);
         return;
+      case "state":
+        // Gateway voice-session state (idle/listening/thinking/speaking/...)
+        // — broadcast per-session UI signal. Don't conflate with the SDK's
+        // local FSM `state` event; surface as its own typed event.
+        this.opts.bus.emit("gateway_state", {
+          state: msg.state,
+          ...(msg.session_id !== undefined ? { sessionId: msg.session_id } : {}),
+        });
+        return;
+      case "partial_transcript":
+        // Live ASR — surface as a non-final transcript delta on the
+        // existing transcript event so chat-style UIs receive both
+        // legacy live ASR and US3-style agent transcript deltas via
+        // the same listener.
+        this.opts.bus.emit("transcript", {
+          speaker: "user",
+          text: msg.text,
+          final: false,
+          seq: 0,
+          ts: Date.now() / 1000,
+        });
+        return;
+      case "barge_in":
+        this.opts.bus.emit("barge_in", {
+          ...(msg.session_id !== undefined ? { sessionId: msg.session_id } : {}),
+        });
+        return;
       default:
         // Unknown / parse-error sentinels. Forward-compat per R-8.
         this.opts.bus.emit("transient_error", {

@@ -164,6 +164,31 @@ export interface WsAgentEventMessage {
   payload: Record<string, unknown>;
 }
 
+/**
+ * Per-session live UI signal: the gateway-side voice session emits
+ * `state` whenever its FSM transitions through idle / listening /
+ * thinking / speaking. Distinct from the SDK's own local FSM `state`
+ * event — surfaced as a separate `gateway_state` bus event.
+ */
+export interface WsGatewayStateMessage {
+  type: "state";
+  session_id?: string;
+  state: string;
+}
+
+/** Per-session live UI signal: incremental ASR transcript text. */
+export interface WsPartialTranscriptMessage {
+  type: "partial_transcript";
+  session_id?: string;
+  text: string;
+}
+
+/** Per-session live UI signal: barge-in detected by the gateway. */
+export interface WsBargeInMessage {
+  type: "barge_in";
+  session_id?: string;
+}
+
 /** Fallback bucket — discriminant on `type` was a string the SDK doesn't know. */
 export interface WsUnknownMessage {
   type: string;
@@ -179,6 +204,9 @@ export type WsInboundMessage =
   | WsOtaManifestMessage
   | WsOtaProgressMessage
   | WsAgentEventMessage
+  | WsGatewayStateMessage
+  | WsPartialTranscriptMessage
+  | WsBargeInMessage
   | WsUnknownMessage;
 
 /**
@@ -213,6 +241,9 @@ export function parseWsInbound(raw: string): WsInboundMessage {
     "ota_manifest",
     "ota_progress",
     "agent_event",
+    "state",
+    "partial_transcript",
+    "barge_in",
   ]);
   if (!known.has(t)) {
     return { type: t, _unknown: parsed as Record<string, unknown> };

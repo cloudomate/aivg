@@ -122,6 +122,8 @@ export interface VoiceSessionResult {
 
 export interface SatelliteEvents {
   state: StateChangePayload;
+  /** Gateway-side voice session state (richer than the SDK's local FSM). */
+  gateway_state: { state: string; sessionId?: string };
   adoption: AdoptionEvent;
   config_changed: SatelliteConfig;
   command: CommandEvent;
@@ -131,6 +133,8 @@ export interface SatelliteEvents {
   transcript: TranscriptDelta;
   tool_call: ToolCallEvent;
   skill: SkillEvent;
+  /** Gateway detected barge-in (user spoke over the assistant). */
+  barge_in: { sessionId?: string };
   remote_stream: RemoteStreamEvent;
   session_started: VoiceSession;
   session_ended: VoiceSessionResult;
