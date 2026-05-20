@@ -36,8 +36,6 @@ src/aivg_core/           # platform-neutral management plane
   webrtc/                  # voice plane
   management/              # App. A REST + SSE + control WS
 src/aivg_cli/            # `aivg` Typer CLI
-src/satellite_core/      # compat shim (one-release window)
-src/sat_cli/             # compat shim (one-release window)
 skills/hermes-agent/     # Hermes-platform agent skill (invokes `aivg` CLI)
 specs/                   # Spec Kit features 001–012
 docs/                    # design notes, data-dir reference, rebrand allow-list
