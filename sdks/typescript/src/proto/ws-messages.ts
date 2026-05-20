@@ -121,7 +121,13 @@ export type AgentEventKind =
 
 export interface WsAgentEventMessage {
   type: "agent_event";
-  kind: AgentEventKind | string; // string for forward-compat unknowns
+  /**
+   * Typed as `string` rather than `AgentEventKind` so unknown future
+   * kinds round-trip through the parser per R-8 forward-compat. The
+   * dispatcher in agent-events.ts narrows back to AgentEventKind for
+   * the known cases and emits `transient_error` for the rest.
+   */
+  kind: string;
   session_id: string;
   seq: number;
   ts: number;
@@ -167,7 +173,7 @@ export function parseWsInbound(raw: string): WsInboundMessage {
   if (typeof t !== "string") {
     return { type: "__non_string_type__", _unknown: parsed as Record<string, unknown> };
   }
-  const known: Set<string> = new Set([
+  const known = new Set<string>([
     "adoption",
     "config_changed",
     "command",

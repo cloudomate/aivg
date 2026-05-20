@@ -50,3 +50,17 @@ export { Satellite } from "./satellite";
 export type { SatelliteOptions, ReconnectPolicy } from "./satellite";
 export { defaultWebrtcFactory } from "./webrtc/browser";
 export { defaultAudioSinkFactory } from "./webrtc/audio-sink";
+
+// US2: fleet-management citizen surface.
+export { ConfigVersionConflict } from "./config";
+export {
+  KNOWN_COMMAND_VERBS,
+  commandResult,
+  isKnownVerb,
+  type CommandVerb,
+} from "./commands";
+export { LOG_LEVELS, filterMinLevel, filterBySource, type LogLevel } from "./logs";
+
+// US3: agent telemetry + OTA helpers.
+export { KNOWN_AGENT_EVENT_KINDS } from "./agent-events";
+export { applyByExpired, sortByNewest } from "./ota";

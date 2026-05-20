@@ -1,0 +1,6 @@
+{ "comment": "Voice turn whose agent invokes one tool (web_search). Order: user transcript → tool_call_started → tool_call_completed → assistant transcript.", "captured_against": "gateway contract 1.0.0" }
+{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "adoption", "state": "adopted" } }
+{ "ts": 2.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "transcript_delta", "session_id": "s-1", "seq": 1, "ts": 2.0, "payload": { "speaker": "user", "text": "what's the weather in SF", "final": true } } }
+{ "ts": 2.5, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "tool_call_started", "session_id": "s-1", "seq": 2, "ts": 2.5, "payload": { "tool_name": "web_search", "tool_id": "tc-1" } } }
+{ "ts": 3.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "tool_call_completed", "session_id": "s-1", "seq": 3, "ts": 3.0, "payload": { "tool_name": "web_search", "tool_id": "tc-1", "result_summary": "Found 5 results" } } }
+{ "ts": 4.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "transcript_delta", "session_id": "s-1", "seq": 4, "ts": 4.0, "payload": { "speaker": "assistant", "text": "It's 64°F and sunny.", "final": true } } }

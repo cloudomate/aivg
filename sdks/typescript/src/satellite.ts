@@ -29,6 +29,11 @@ import type {
 import type { WebrtcFactory, AudioSinkFactory } from "./webrtc/injectable";
 import { defaultWebrtcFactory } from "./webrtc/browser";
 import { defaultAudioSinkFactory } from "./webrtc/audio-sink";
+import { AdoptionTracker } from "./adoption";
+// ConfigVersionConflict is exported from src/index.ts barrel and referenced
+// from JSDoc in setConfig() — re-imported here keeps the consumer-visible
+// docstring's `@throws` claim accurate.
+import { ConfigClient } from "./config";
 
 export interface ReconnectPolicy {
   initialMs: number;
@@ -67,11 +72,11 @@ type Unsubscribe = () => void;
 export class Satellite {
   public readonly options: Readonly<Required<Pick<SatelliteOptions, "gatewayUrl" | "deviceId" | "deviceType">> & SatelliteOptions>;
 
-  private readonly bus: EventBus<SatelliteEvents> = new EventBus();
+  private readonly bus = new EventBus<SatelliteEvents>();
   private readonly cp: ControlPlane;
+  private readonly adoption: AdoptionTracker = new AdoptionTracker();
+  private readonly configClient: ConfigClient;
   private currentState: SatelliteState = "idle";
-  private adoptionState: AdoptionEvent["state"] = "pending";
-  private hasBeenAdopted = false;
   private currentSession: InternalVoiceSession | null = null;
   private connectPromise: Promise<void> | null = null;
   private beginPromise: Promise<VoiceSession> | null = null;
@@ -84,18 +89,21 @@ export class Satellite {
     this.options = Object.freeze(opts) as typeof this.options;
     this.mixedContentError = checkMixedContent(opts.gatewayUrl);
 
-    // Subscribe FSM to bus → emit `state` events on transitions.
-    this.bus.on("adoption", (e) => {
-      const prev = this.adoptionState;
-      this.adoptionState = e.state;
-      if (e.state === "adopted") this.hasBeenAdopted = true;
-      // If this is the first time we see "adopted", the bus event
-      // already says so via firstApproval (set by AdoptionTracker in
-      // US2; for Phase 3 we mark it here as a best-effort).
-      if (prev !== e.state && e.state === "adopted") {
-        // Re-emit with firstApproval coerced; consumer never sees
-        // both states without a transition.
-      }
+    // Attach adoption tracker BEFORE the control plane subscribes so
+    // its re-emit lands at the top of the listener queue and consumers
+    // see the correct `firstApproval` flag.
+    this.adoption.attach(this.bus);
+
+    // Cache config from inbound `config_changed` events so optimistic
+    // concurrency on setConfig() works without an extra GET round-trip.
+    this.bus.on("config_changed", (cfg) => {
+      this.configClient.cacheChanged(cfg);
+    });
+
+    // Configure HTTP config client.
+    this.configClient = new ConfigClient({
+      gatewayUrl: opts.gatewayUrl,
+      deviceId: opts.deviceId,
     });
 
     // Construct the control plane wiring.
@@ -122,7 +130,11 @@ export class Satellite {
   }
 
   get isAdopted(): boolean {
-    return this.adoptionState === "adopted";
+    return this.adoption.state === "adopted";
+  }
+
+  get adoptionState(): AdoptionEvent["state"] {
+    return this.adoption.state;
   }
 
   // -------- event surface --------
@@ -196,7 +208,7 @@ export class Satellite {
     if (this.currentSession) {
       return Promise.resolve(this.currentSession.publicHandle());
     }
-    if (!this.hasBeenAdopted && this.adoptionState !== "adopted") {
+    if (!this.adoption.hasBeenAdopted && this.adoption.state !== "adopted") {
       // Spec edge case: `not_adopted` short-circuit per FR-001.
       return Promise.reject(
         sdkError("not_adopted", "Device is not adopted yet — operator must approve via `aivg device adopt`"),
@@ -209,8 +221,8 @@ export class Satellite {
       webrtcFactory: this.options.webrtcFactory ?? defaultWebrtcFactory,
       audioSinkFactory: this.options.audioSinkFactory ?? defaultAudioSinkFactory,
       micConstraints: this.options.micConstraints ?? DEFAULT_MIC_CONSTRAINTS,
-      onSessionConnected: () => this.driveFsm({ kind: "begin_session_resolved" }),
-      onFirstRemoteAudio: () => this.driveFsm({ kind: "first_remote_audio" }),
+      onSessionConnected: () => { this.driveFsm({ kind: "begin_session_resolved" }); },
+      onFirstRemoteAudio: () => { this.driveFsm({ kind: "first_remote_audio" }); },
       onSessionEnded: () => {
         this.currentSession = null;
         this.driveFsm({ kind: "session_ended" });
@@ -241,30 +253,20 @@ export class Satellite {
     this.driveFsm({ kind: "recover" });
   }
 
-  // -------- US2 stubs (full impl lands in Phase 4) -------------------
+  // -------- US2: config push/pull -----------------------------------
 
-  /**
-   * Read the current SatelliteConfig from the gateway.
-   * Phase 3 stub — real implementation in T041 (US2).
-   */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getConfig(): Promise<SatelliteConfig> {
-    throw sdkError(
-      "signaling_failed",
-      "getConfig() not yet implemented — lands in feature 014 US2 (T041)",
-    );
+  /** Read the current SatelliteConfig from the gateway. */
+  getConfig(): Promise<SatelliteConfig> {
+    return this.configClient.get();
   }
 
   /**
-   * Push a partial config update to the gateway.
-   * Phase 3 stub — real implementation in T041 (US2).
+   * Push a partial config update to the gateway. Throws
+   * `ConfigVersionConflict` if the local cached version is stale — the
+   * consumer should refresh via `getConfig()` and retry.
    */
-  // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-unused-vars
-  async setConfig(_patch: Partial<SatelliteConfig>): Promise<SatelliteConfig> {
-    throw sdkError(
-      "signaling_failed",
-      "setConfig() not yet implemented — lands in feature 014 US2 (T041)",
-    );
+  setConfig(patch: Partial<SatelliteConfig>): Promise<SatelliteConfig> {
+    return this.configClient.patch(patch);
   }
 
   // -------- internal --------

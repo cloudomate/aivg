@@ -18,9 +18,9 @@
   <body>
     <h3>Hermes Satellite — live test (feature 003)</h3>
     <div class="row">
-      mgmt <input id="mgmt" value="http://192.168.4.140:8643" />
-      webrtc <input id="webrtc" value="http://192.168.4.140:8644" />
-      ws <input id="ws" value="ws://192.168.4.140:8643/satellite/ws" />
+      mgmt <input id="mgmt" value="http://localhost:8643" />
+      webrtc <input id="webrtc" value="http://localhost:8644" />
+      ws <input id="ws" value="ws://localhost:8643/satellite/ws" />
     </div>
     <div class="row">
       <button id="connect">Connect</button>
@@ -35,6 +35,15 @@
     <!-- Hidden playback in the SAME renderer so Chromium AEC3 has the
          render reference (design satellite #3, browser_aec3). -->
     <audio id="far" autoplay></audio>
-    <script src="renderer.js"></script>
+    <!-- Resolve the @aivg/sat-sdk bare specifier to the local symlink
+         created by `file:../../sdks/typescript` in package.json. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@aivg/sat-sdk": "./node_modules/@aivg/sat-sdk/dist/index.js"
+        }
+      }
+    </script>
+    <script type="module" src="renderer.js"></script>
   </body>
 </html>

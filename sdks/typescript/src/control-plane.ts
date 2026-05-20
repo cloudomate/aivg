@@ -16,6 +16,7 @@ import { parseWsInbound, type WsOutboundMessage } from "./proto/ws-messages";
 import type { EventBus, SatelliteEvents } from "./events";
 import type { SatelliteState } from "./state";
 import { sdkError, type SdkError } from "./errors";
+import { AgentEventDispatcher } from "./agent-events";
 
 export interface ReconnectPolicy {
   initialMs: number;
@@ -134,6 +135,7 @@ export class ControlPlane {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastOpenedAt = 0;
   private stoppedByUser = false;
+  private readonly agentDispatch: AgentEventDispatcher = new AgentEventDispatcher();
   /**
    * Resolved on first successful `open`+register; rejected on permanent
    * failure (max-retries exceeded). Re-created on `start()`.
@@ -214,8 +216,8 @@ export class ControlPlane {
       return;
     }
     this.ws = ws;
-    ws.onopen = (): void => this.handleOpen();
-    ws.onclose = (ev: CloseEvent): void => this.handleClose(ev);
+    ws.onopen = (): void => { this.handleOpen(); };
+    ws.onclose = (ev: CloseEvent): void => { this.handleClose(ev); };
     ws.onerror = (): void => {
       // onerror → onclose usually follows; surface as transient.
       this.opts.bus.emit("transient_error", {
@@ -225,7 +227,7 @@ export class ControlPlane {
         attempt: this.attempt,
       });
     };
-    ws.onmessage = (ev: MessageEvent<string>): void => this.handleMessage(ev.data);
+    ws.onmessage = (ev: MessageEvent<string>): void => { this.handleMessage(ev.data); };
   }
 
   private handleOpen(): void {
@@ -382,23 +384,10 @@ export class ControlPlane {
         });
         return;
       case "agent_event":
-        // Detailed fan-out lands in US3 (T054). Phase 3 forwards the
-        // raw kind discriminant so unit tests can verify the wire
-        // path. The transcript/tool/skill split is US3's job.
-        if (msg.kind === "transcript_delta") {
-          const p = msg.payload as {
-            speaker?: "user" | "assistant";
-            text?: string;
-            final?: boolean;
-          };
-          this.opts.bus.emit("transcript", {
-            speaker: p.speaker ?? "assistant",
-            text: p.text ?? "",
-            final: p.final ?? false,
-            seq: msg.seq,
-            ts: msg.ts,
-          });
-        }
+        // US3 fan-out: route into tool_call / skill / transcript
+        // typed events based on `kind`. Unknown `kind` values emit
+        // one transient_error per session per R-8.
+        this.agentDispatch.dispatch(this.opts.bus, msg);
         return;
       default:
         // Unknown / parse-error sentinels. Forward-compat per R-8.

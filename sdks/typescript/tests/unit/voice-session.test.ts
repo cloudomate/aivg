@@ -14,7 +14,7 @@ interface Captured {
 
 function buildSession(
   micStream: MediaStream,
-  answerOk: boolean = true,
+  answerOk = true,
 ): { session: InternalVoiceSession; captured: Captured } {
   const bus = new EventBus<SatelliteEvents>();
   const captured: Captured = {

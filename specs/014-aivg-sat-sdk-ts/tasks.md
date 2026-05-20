@@ -107,26 +107,26 @@ New top-level `sdks/typescript/` directory inside the existing monorepo. Refacto
 
 ### Implementation (US2)
 
-- [ ] T040 [P] [US2] Create `sdks/typescript/src/adoption.ts` — `AdoptionTracker` class: subscribes to inbound `adoption` WS messages; maintains `pending → adopted` state; emits `adoption` event with `firstApproval: boolean` per [data-model.md §3](./data-model.md). Wired into `Satellite.adoptionState`.
-- [ ] T041 [P] [US2] Create `sdks/typescript/src/config.ts` — `ConfigClient`: `getConfig()` via `GET /satellite/{id}/config`; `setConfig(patch)` via `POST /satellite/{id}/config` with `if_match_version` for optimistic concurrency; 409 → typed retry hint. Subscribes to `config_changed` WS messages and emits via the bus.
-- [ ] T042 [P] [US2] Create `sdks/typescript/src/commands.ts` — `CommandDispatcher`: parses `command` WS messages, builds `CommandEvent` with `reply()` channel that posts `command_result` back over WS. Closed-set verbs per [data-model.md §7](./data-model.md).
-- [ ] T043 [P] [US2] Create `sdks/typescript/src/logs.ts` — `LogForwarder`: maps inbound `log_entry` WS messages to typed `LogEntry` events, dispatched via the bus.
-- [ ] T044 [US2] Wire US2 modules into `sdks/typescript/src/satellite.ts` — instantiate `AdoptionTracker`, `ConfigClient`, `CommandDispatcher`, `LogForwarder` from the constructor; expose `getConfig()`/`setConfig()` methods; ensure `not_adopted` short-circuit on `beginSession()` until `adoptionState === "adopted"` (FR-001, edge case).
-- [ ] T045 [US2] Update `sdks/typescript/src/index.ts` exports for US2 — add `AdoptionState`, `AdoptionEvent`, `SatelliteConfig`, `CommandEvent`, `CommandResult`, `LogEntry` types.
+- [X] T040 [P] [US2] Create `sdks/typescript/src/adoption.ts` — `AdoptionTracker` class: subscribes to inbound `adoption` WS messages; maintains `pending → adopted` state; emits `adoption` event with `firstApproval: boolean` per [data-model.md §3](./data-model.md). Wired into `Satellite.adoptionState`.
+- [X] T041 [P] [US2] Create `sdks/typescript/src/config.ts` — `ConfigClient`: `getConfig()` via `GET /satellite/{id}/config`; `setConfig(patch)` via `POST /satellite/{id}/config` with `if_match_version` for optimistic concurrency; 409 → typed retry hint. Subscribes to `config_changed` WS messages and emits via the bus.
+- [X] T042 [P] [US2] Create `sdks/typescript/src/commands.ts` — `CommandDispatcher`: parses `command` WS messages, builds `CommandEvent` with `reply()` channel that posts `command_result` back over WS. Closed-set verbs per [data-model.md §7](./data-model.md).
+- [X] T043 [P] [US2] Create `sdks/typescript/src/logs.ts` — `LogForwarder`: maps inbound `log_entry` WS messages to typed `LogEntry` events, dispatched via the bus.
+- [X] T044 [US2] Wire US2 modules into `sdks/typescript/src/satellite.ts` — instantiate `AdoptionTracker`, `ConfigClient`, `CommandDispatcher`, `LogForwarder` from the constructor; expose `getConfig()`/`setConfig()` methods; ensure `not_adopted` short-circuit on `beginSession()` until `adoptionState === "adopted"` (FR-001, edge case).
+- [X] T045 [US2] Update `sdks/typescript/src/index.ts` exports for US2 — add `AdoptionState`, `AdoptionEvent`, `SatelliteConfig`, `CommandEvent`, `CommandResult`, `LogEntry` types.
 
 ### Tests (US2)
 
-- [ ] T046 [P] [US2] Unit test: `sdks/typescript/tests/unit/adoption.test.ts` — pending → adopted transition; `firstApproval` true exactly once; ignored re-affirmations.
-- [ ] T047 [P] [US2] Unit test: `sdks/typescript/tests/unit/config.test.ts` — happy-path get/set; 409 conflict surfaces `version_conflict` for the consumer to retry; `config_changed` WS push surfaces as event.
-- [ ] T048 [P] [US2] Unit test: `sdks/typescript/tests/unit/commands.test.ts` — verb dispatch for each closed-set verb; `reply()` posts `command_result` over WS with matching `request_id`; reply timeout (consumer didn't call reply) does not leak.
-- [ ] T049 [P] [US2] Unit test: `sdks/typescript/tests/unit/logs.test.ts` — `log_entry` WS push surfaces as `LogEntry` event; level/source/message preserved.
+- [X] T046 [P] [US2] Unit test: `sdks/typescript/tests/unit/adoption.test.ts` — pending → adopted transition; `firstApproval` true exactly once; ignored re-affirmations.
+- [X] T047 [P] [US2] Unit test: `sdks/typescript/tests/unit/config.test.ts` — happy-path get/set; 409 conflict surfaces `version_conflict` for the consumer to retry; `config_changed` WS push surfaces as event.
+- [X] T048 [P] [US2] Unit test: `sdks/typescript/tests/unit/commands.test.ts` — verb dispatch for each closed-set verb; `reply()` posts `command_result` over WS with matching `request_id`; reply timeout (consumer didn't call reply) does not leak.
+- [X] T049 [P] [US2] Unit test: `sdks/typescript/tests/unit/logs.test.ts` — `log_entry` WS push surfaces as `LogEntry` event; level/source/message preserved.
 
 ### Contract tests + fixtures (US2)
 
-- [ ] T050 [US2] Contract test: `sdks/typescript/tests/contract/wire-protocol.test.ts` — replays JSON-lines fixtures through the SDK with mocked WS + fetch; asserts the documented event sequence. Per [contracts/wire-protocol.md](./contracts/wire-protocol.md) "Captured fixture format". **Binding gate for SC-007 (contract version preserved).**
-- [ ] T051 [P] [US2] Create fixture: `sdks/typescript/tests/fixtures/wire/happy-path-one-turn.jsonl` — captured (or hand-crafted) from a clean register/adopt/voice-turn/disconnect sequence.
-- [ ] T052 [P] [US2] Create fixture: `sdks/typescript/tests/fixtures/wire/reconnect-after-drop.jsonl` — WS drop mid-session + recovery within 30 s. **Binding gate for SC-003.**
-- [ ] T053 [P] [US2] Create fixture: `sdks/typescript/tests/fixtures/wire/config-pushed-mid-call.jsonl` — operator pushes config change during an active voice session.
+- [X] T050 [US2] Contract test: `sdks/typescript/tests/contract/wire-protocol.test.ts` — replays JSON-lines fixtures through the SDK with mocked WS + fetch; asserts the documented event sequence. Per [contracts/wire-protocol.md](./contracts/wire-protocol.md) "Captured fixture format". **Binding gate for SC-007 (contract version preserved).**
+- [X] T051 [P] [US2] Create fixture: `sdks/typescript/tests/fixtures/wire/happy-path-one-turn.jsonl` — captured (or hand-crafted) from a clean register/adopt/voice-turn/disconnect sequence.
+- [X] T052 [P] [US2] Create fixture: `sdks/typescript/tests/fixtures/wire/reconnect-after-drop.jsonl` — WS drop mid-session + recovery within 30 s. **Binding gate for SC-003.**
+- [X] T053 [P] [US2] Create fixture: `sdks/typescript/tests/fixtures/wire/config-pushed-mid-call.jsonl` — operator pushes config change during an active voice session.
 
 **Checkpoint**: an SDK satellite is now a full management-plane citizen. `aivg list`, `aivg device config set/get`, `aivg device command`, and `aivg logs` all work against it identically to the legacy Electron test client.
 
@@ -140,23 +140,23 @@ New top-level `sdks/typescript/` directory inside the existing monorepo. Refacto
 
 ### Implementation (US3)
 
-- [ ] T054 [P] [US3] Create `sdks/typescript/src/agent-events.ts` — parses inbound `agent_event` WS messages by `kind` (`tool_call_started`, `tool_call_completed`, `tool_call_failed`, `skill_loaded`, `transcript_delta`); fans out to typed events (`tool_call`, `skill`, `transcript`) on the bus. Unknown `kind` values emit `transient_error(protocol_mismatch)` once per session per R-8.
-- [ ] T055 [P] [US3] Create `sdks/typescript/src/ota.ts` — parses inbound `ota_manifest` + `ota_progress` WS messages; emits `ota_manifest` / `ota_progress` events. Never auto-applies (FR-018) — pure forwarder.
-- [ ] T056 [US3] Wire `agent-events.ts` + `ota.ts` into `sdks/typescript/src/satellite.ts`.
-- [ ] T057 [US3] Implement async-iterator wrappers in `sdks/typescript/src/satellite.ts` — `transcripts()`, `logs()`, `states()` per [contracts/satellite-api.md](./contracts/satellite-api.md) "Async-iterator sugar". Bounded queue (1024) per iterator; overflow emits `transient_error(buffer_overflow)`.
-- [ ] T058 [US3] Update `sdks/typescript/src/index.ts` exports for US3 — add `ToolCallEvent`, `SkillEvent`, `TranscriptDelta`, `OtaManifest`, `OtaProgress` types.
+- [X] T054 [P] [US3] Create `sdks/typescript/src/agent-events.ts` — parses inbound `agent_event` WS messages by `kind` (`tool_call_started`, `tool_call_completed`, `tool_call_failed`, `skill_loaded`, `transcript_delta`); fans out to typed events (`tool_call`, `skill`, `transcript`) on the bus. Unknown `kind` values emit `transient_error(protocol_mismatch)` once per session per R-8.
+- [X] T055 [P] [US3] Create `sdks/typescript/src/ota.ts` — parses inbound `ota_manifest` + `ota_progress` WS messages; emits `ota_manifest` / `ota_progress` events. Never auto-applies (FR-018) — pure forwarder.
+- [X] T056 [US3] Wire `agent-events.ts` + `ota.ts` into `sdks/typescript/src/satellite.ts`.
+- [X] T057 [US3] Implement async-iterator wrappers in `sdks/typescript/src/satellite.ts` — `transcripts()`, `logs()`, `states()` per [contracts/satellite-api.md](./contracts/satellite-api.md) "Async-iterator sugar". Bounded queue (1024) per iterator; overflow emits `transient_error(buffer_overflow)`.
+- [X] T058 [US3] Update `sdks/typescript/src/index.ts` exports for US3 — add `ToolCallEvent`, `SkillEvent`, `TranscriptDelta`, `OtaManifest`, `OtaProgress` types.
 
 ### Tests (US3)
 
-- [ ] T059 [P] [US3] Unit test: `sdks/typescript/tests/unit/agent-events.test.ts` — each `kind` round-trip; unknown `kind` emits exactly one `transient_error` per session; speaker/seq/ts preserved on `transcript_delta`.
-- [ ] T060 [P] [US3] Unit test: `sdks/typescript/tests/unit/ota.test.ts` — manifest + progress shapes round-trip; SDK never auto-fetches or auto-applies; consumer events fire.
-- [ ] T061 [US3] Contract test: `sdks/typescript/tests/contract/event-surface.test.ts` — for every key in `SatelliteEvents`, drive a fixture that should fire it; assert the event fires with the documented payload shape. **Binding gate for FR-006/FR-015/FR-016/FR-017/FR-018.**
+- [X] T059 [P] [US3] Unit test: `sdks/typescript/tests/unit/agent-events.test.ts` — each `kind` round-trip; unknown `kind` emits exactly one `transient_error` per session; speaker/seq/ts preserved on `transcript_delta`.
+- [X] T060 [P] [US3] Unit test: `sdks/typescript/tests/unit/ota.test.ts` — manifest + progress shapes round-trip; SDK never auto-fetches or auto-applies; consumer events fire.
+- [X] T061 [US3] Contract test: `sdks/typescript/tests/contract/event-surface.test.ts` — for every key in `SatelliteEvents`, drive a fixture that should fire it; assert the event fires with the documented payload shape. **Binding gate for FR-006/FR-015/FR-016/FR-017/FR-018.**
 
 ### Fixtures (US3)
 
-- [ ] T062 [P] [US3] Create fixture: `sdks/typescript/tests/fixtures/wire/tool-call-turn.jsonl` — turn that invokes one tool (started + completed events).
-- [ ] T063 [P] [US3] Create fixture: `sdks/typescript/tests/fixtures/wire/ota-during-session.jsonl` — OTA manifest arrives while in `speaking` state (verifies non-auto-disconnect).
-- [ ] T064 [P] [US3] Create fixture: `sdks/typescript/tests/fixtures/wire/unknown-event-kind.jsonl` — forward-compat smoke (R-8).
+- [X] T062 [P] [US3] Create fixture: `sdks/typescript/tests/fixtures/wire/tool-call-turn.jsonl` — turn that invokes one tool (started + completed events).
+- [X] T063 [P] [US3] Create fixture: `sdks/typescript/tests/fixtures/wire/ota-during-session.jsonl` — OTA manifest arrives while in `speaking` state (verifies non-auto-disconnect).
+- [X] T064 [P] [US3] Create fixture: `sdks/typescript/tests/fixtures/wire/unknown-event-kind.jsonl` — forward-compat smoke (R-8).
 
 **Checkpoint**: a consumer UI can render tool calls in flight, show streaming assistant text, and let the user see which skill the agent loaded mid-turn.
 
@@ -170,11 +170,11 @@ New top-level `sdks/typescript/` directory inside the existing monorepo. Refacto
 
 ### Implementation (US4)
 
-- [ ] T065 [US4] Add `@aivg/sat-sdk` to `clients/electron-test/package.json` `dependencies` using a `file:../../sdks/typescript` path during dev; tweak `package.json#main`/`module` resolution if needed (Electron 31 + Vite/esbuild bundler).
-- [ ] T066 [US4] Rewrite `clients/electron-test/renderer.js` to consume `Satellite` only — instantiate from input fields, subscribe to the documented events, drive `connect()`/`beginSession()`/`endSession()` from the existing buttons. Use the skeleton from [quickstart.md §"Flow 2"](./quickstart.md) as the starting point.
-- [ ] T067 [US4] Delete `clients/electron-test/renderer.js` blocks that directly use `RTCPeerConnection`, `WebSocket`, `fetch(.../webrtc/...)`, or `navigator.mediaDevices.getUserMedia`. After this task, `grep -E 'RTCPeerConnection|new WebSocket|/webrtc/offer|getUserMedia' clients/electron-test/renderer.js` MUST return zero matches.
-- [ ] T068 [US4] Live-verify functional parity — start the gateway (`hermes gateway run`), run `npm start` in `clients/electron-test/`, run `aivg device adopt electron-test-1`, hold PTT, confirm one full voice turn completes with transcript surfaced in the UI. Mirror the feature-013 live test trace at agent.log lines 16:13:34 → 16:13:54.
-- [ ] T069 [US4] Verify SC-009 line-count reduction — `git diff --stat clients/electron-test/renderer.js` before/after MUST show ≥ 30 % deletions in non-blank, non-comment lines. Record measurement in `specs/014-aivg-sat-sdk-ts/integration-notes.md`.
+- [X] T065 [US4] Add `@aivg/sat-sdk` to `clients/electron-test/package.json` `dependencies` using a `file:../../sdks/typescript` path during dev; tweak `package.json#main`/`module` resolution if needed (Electron 31 + Vite/esbuild bundler).
+- [X] T066 [US4] Rewrite `clients/electron-test/renderer.js` to consume `Satellite` only — instantiate from input fields, subscribe to the documented events, drive `connect()`/`beginSession()`/`endSession()` from the existing buttons. Use the skeleton from [quickstart.md §"Flow 2"](./quickstart.md) as the starting point.
+- [X] T067 [US4] Delete `clients/electron-test/renderer.js` blocks that directly use `RTCPeerConnection`, `WebSocket`, `fetch(.../webrtc/...)`, or `navigator.mediaDevices.getUserMedia`. After this task, `grep -E 'RTCPeerConnection|new WebSocket|/webrtc/offer|getUserMedia' clients/electron-test/renderer.js` MUST return zero matches.
+- [X] T068 [US4] Live-verify functional parity — start the gateway (`hermes gateway run`), run `npm start` in `clients/electron-test/`, run `aivg device adopt electron-test-1`, hold PTT, confirm one full voice turn completes with transcript surfaced in the UI. Mirror the feature-013 live test trace at agent.log lines 16:13:34 → 16:13:54.
+- [X] T069 [US4] Verify SC-009 line-count reduction — `git diff --stat clients/electron-test/renderer.js` before/after MUST show ≥ 30 % deletions in non-blank, non-comment lines. Record measurement in `specs/014-aivg-sat-sdk-ts/integration-notes.md`.
 
 **Checkpoint**: every future SDK protocol change has an immediately-runnable integration test: launch `clients/electron-test/`, complete a voice turn. The Electron test client is now an SDK consumer, not a fork.
 
@@ -184,15 +184,15 @@ New top-level `sdks/typescript/` directory inside the existing monorepo. Refacto
 
 **Purpose**: package-quality items + documentation + verification of the no-leak / no-`any` / size budgets called for in spec success criteria.
 
-- [ ] T070 [P] Contract test: `sdks/typescript/tests/contract/no-any-in-public.test.ts` — uses `ts-morph` to walk `dist/index.d.ts`; asserts no `any` type appears in any exported symbol's declaration. **Binding gate for SC-004.**
-- [ ] T071 [P] Package-size check script `sdks/typescript/scripts/check-size.mjs` — builds `dist/`, runs `gzip-size` on `index.mjs`, asserts ≤ 50 KB. Wired into the `prepublishOnly` script.
-- [ ] T072 [P] Write `sdks/typescript/README.md` — install instructions, 30-line example (from `browser-ptt`), feature list, links to spec / data-model / contracts.
-- [ ] T073 [P] Finalize `sdks/typescript/CHANGELOG.md` with the `0.1.0` release notes covering US1+US2+US3+US4 (Keep-a-Changelog).
-- [ ] T074 [P] Run `npm run lint` + `npm run format` clean; commit the autofix.
-- [ ] T075 [P] Add CI snippet to `.github/workflows/sdk-ts.yml` (if `.github/workflows/` exists) or to `sdks/typescript/README.md` "CI" section: build + unit + contract + size check + lint. Integration tests run only when `GATEWAY_URL` env is set (CI-gated).
-- [ ] T076 Run `npm pack` in `sdks/typescript/`; inspect the resulting tarball — assert `dist/index.{mjs,cjs,d.ts}` are present, `tests/` + `examples/` + `node_modules/` + fixture `.jsonl` files are EXCLUDED. Verify `package.json#files` works as intended.
-- [ ] T077 Update `specs/014-aivg-sat-sdk-ts/quickstart.md` to reflect the final import paths and example file locations once everything has shipped.
-- [ ] T078 Tag and announce — bump `sdks/typescript/package.json#version` to `0.1.0`, create git tag `sdk-ts-v0.1.0` per R-13.
+- [X] T070 [P] Contract test: `sdks/typescript/tests/contract/no-any-in-public.test.ts` — uses `ts-morph` to walk `dist/index.d.ts`; asserts no `any` type appears in any exported symbol's declaration. **Binding gate for SC-004.**
+- [X] T071 [P] Package-size check script `sdks/typescript/scripts/check-size.mjs` — builds `dist/`, runs `gzip-size` on `index.mjs`, asserts ≤ 50 KB. Wired into the `prepublishOnly` script.
+- [X] T072 [P] Write `sdks/typescript/README.md` — install instructions, 30-line example (from `browser-ptt`), feature list, links to spec / data-model / contracts.
+- [X] T073 [P] Finalize `sdks/typescript/CHANGELOG.md` with the `0.1.0` release notes covering US1+US2+US3+US4 (Keep-a-Changelog).
+- [X] T074 [P] Run `npm run lint` + `npm run format` clean; commit the autofix.
+- [X] T075 [P] Add CI snippet to `.github/workflows/sdk-ts.yml` (if `.github/workflows/` exists) or to `sdks/typescript/README.md` "CI" section: build + unit + contract + size check + lint. Integration tests run only when `GATEWAY_URL` env is set (CI-gated).
+- [X] T076 Run `npm pack` in `sdks/typescript/`; inspect the resulting tarball — assert `dist/index.{mjs,cjs,d.ts}` are present, `tests/` + `examples/` + `node_modules/` + fixture `.jsonl` files are EXCLUDED. Verify `package.json#files` works as intended.
+- [X] T077 Update `specs/014-aivg-sat-sdk-ts/quickstart.md` to reflect the final import paths and example file locations once everything has shipped.
+- [X] T078 Tag and announce — bump `sdks/typescript/package.json#version` to `0.1.0`, create git tag `sdk-ts-v0.1.0` per R-13.
 
 ---
 

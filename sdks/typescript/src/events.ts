@@ -150,7 +150,7 @@ type Unsubscribe = () => void;
 // signatures are strongly typed via the M[E] indexing.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class EventBus<M extends Record<string, any>> {
-  private readonly listeners: Map<keyof M, Set<Handler<M[keyof M]>>> = new Map();
+  private readonly listeners = new Map<keyof M, Set<Handler<M[keyof M]>>>();
 
   on<E extends keyof M>(event: E, handler: Handler<M[E]>): Unsubscribe {
     let set = this.listeners.get(event);
@@ -159,7 +159,7 @@ export class EventBus<M extends Record<string, any>> {
       this.listeners.set(event, set);
     }
     set.add(handler as Handler<M[keyof M]>);
-    return () => this.off(event, handler);
+    return () => { this.off(event, handler); };
   }
 
   off<E extends keyof M>(event: E, handler: Handler<M[E]>): void {

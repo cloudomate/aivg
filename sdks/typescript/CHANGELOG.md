@@ -5,24 +5,65 @@ All notable changes to `@aivg/sat-sdk` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] — 2026-05-20
+
+Initial release. Feature 014 of the AIVG monorepo.
 
 ### Added
 
-- **0.1.0 (in progress)** — initial release, feature 014.
-  - `Satellite` class with `connect()`, `disconnect()`, `beginSession()`,
-    `endSession()`, `getConfig()`, `setConfig()`.
-  - Control-plane WebSocket client with exponential-back-off reconnect.
-  - Voice-plane WebRTC offerer flow (full-gather → POST `/webrtc/offer`).
-  - State machine: `idle | listening | speaking | error`.
-  - Adoption flow `pending → adopted`.
-  - Typed event surface (`adoption`, `state`, `config_changed`, `command`,
-    `log`, `ota_manifest`, `ota_progress`, `transcript`, `tool_call`,
-    `skill`, `error`, `transient_error`, `session_started`,
-    `session_ended`, `remote_stream`).
-  - Async-iterator sugar: `transcripts()`, `logs()`, `states()`.
-  - WebRTC + audio-sink dependency injection (DI holes per R-1/R-9).
-  - Browser + Electron + Node targets. No native deps.
-  - Contract version: `1.0.0` (matches `aivg --contract-version`).
+- `Satellite` class — top-level handle owning the control-plane WS,
+  the per-session WebRTC PC, and the typed event surface.
+  - `connect()` / `disconnect()` — control-plane lifecycle, idempotent.
+  - `beginSession()` / `endSession()` — voice-plane lifecycle,
+    idempotent.
+  - `getConfig()` / `setConfig()` — management-plane config push/pull
+    with optimistic-concurrency conflict detection (throws
+    `ConfigVersionConflict` on 409).
+- **Control plane**: long-lived WebSocket against `/satellite/ws`,
+  exponential-back-off reconnect (500 ms → ×1.5 → 30 s ceiling,
+  ±20 % jitter, 60 s success-reset).
+- **Voice plane**: WebRTC offerer flow with full-gather ICE then
+  `POST /webrtc/offer`. Mic constraints default to
+  `{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }`.
+- **State machine**: `idle | listening | speaking | error`. Pure
+  function reducer; exhaustive-switch typing.
+- **Adoption flow**: tracks `pending → adopted` with one-shot
+  `firstApproval: true` semantics.
+- **Typed event surface** (`on(event, handler)` returns unsubscribe;
+  `off(event, handler)` mirrors): `adoption`, `state`, `config_changed`,
+  `command`, `log`, `ota_manifest`, `ota_progress`, `transcript`,
+  `tool_call`, `skill`, `remote_stream`, `session_started`,
+  `session_ended`, `error`, `transient_error`.
+- **Async-iterator sugar**: `transcripts()`, `logs()`, `states()` —
+  bounded-queue (1024) iterators that emit `transient_error(buffer_overflow)`
+  on drop.
+- **OTA forwarding**: receives `ota_manifest` / `ota_progress` events
+  from the gateway and forwards them to consumer handlers. NEVER
+  auto-applies (browser/Electron OTA is application-side).
+- **Closed error-code set** (12 codes): `no_webrtc_impl`,
+  `no_microphone_api`, `permission_denied`, `ice_failed`,
+  `ice_gathering_timeout`, `ws_disconnected`, `ws_max_retries_exceeded`,
+  `signaling_failed`, `mixed_content`, `not_adopted`,
+  `protocol_mismatch`, `duplicate_device`.
+- **Dependency injection**: `webrtcFactory` (use `@roamhq/wrtc` for Node),
+  `audioSinkFactory` (consumer-provided in Node; managed `<audio>` in
+  browser/Electron).
+- **Forward-compat parsing**: unknown WS message `type` values + unknown
+  `agent_event` kinds emit ONE `transient_error(protocol_mismatch)`
+  per session and are otherwise silent.
 
-[Unreleased]: https://github.com/cloudomate/aivg/compare/HEAD
+### Targets
+
+- Modern browsers (Chrome/Firefox/Safari).
+- Electron 28+ (renderer + main, both fine).
+- Node.js 20+ (consumer must pass `webrtcFactory: () => new wrtc.RTCPeerConnection(...)`).
+
+### Contract
+
+- Wire-protocol contract version: `1.0.0` (matches `aivg --contract-version`).
+- Single artefact pair: `dist/index.js` (ESM) + `dist/index.cjs` (CJS) +
+  `dist/index.d.ts` (TypeScript declarations).
+- Bundle size: ~10 KB gzipped (5× under the 50 KB internal budget).
+- Zero native dependencies.
+
+[0.1.0]: https://github.com/cloudomate/aivg/releases/tag/sdk-ts-v0.1.0

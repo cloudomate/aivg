@@ -1,6 +1,6 @@
 {
   "name": "@aivg/sat-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "AIVG satellite-side SDK — register, voice (WebRTC), config, agent telemetry, and OTA hooks against an AIVG gateway. Browser + Electron + Node. No native deps.",
   "license": "MIT",
   "type": "module",

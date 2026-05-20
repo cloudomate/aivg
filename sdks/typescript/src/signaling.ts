@@ -44,7 +44,7 @@ export class Signaling {
     };
     const timeoutMs = args.timeoutMs ?? 10_000;
     const ctrl = new this.AbortControllerCtor();
-    const handle = setTimeout(() => ctrl.abort(), timeoutMs);
+    const handle = setTimeout(() => { ctrl.abort(); }, timeoutMs);
     let resp: Response;
     try {
       resp = await this.fetchFn(url, {
