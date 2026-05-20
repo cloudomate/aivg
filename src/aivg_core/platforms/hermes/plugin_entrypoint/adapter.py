@@ -33,7 +33,21 @@ def _aiortc_available() -> bool:
 def register(ctx):
     """Called by the Hermes plugin system. Builds the adapter via feature
     001's verified factory and registers it through the real `ctx`
-    contract (constitution IV — reuse, don't rebuild)."""
+    contract (constitution IV — reuse, don't rebuild).
+
+    Auth: feature 013 — the satellite handles its own per-device adoption
+    (PENDING → ADOPTED via `aivg device adopt`), so we wire BOTH the
+    per-platform allow-list env (``SATELLITE_ALLOWED_USERS``) and the
+    skip-allowlist env (``SATELLITE_ALLOW_ALL_USERS``) into Hermes's
+    `_is_user_authorized()`. Without these, gateway-wide
+    ``GATEWAY_ALLOW_ALL_USERS=false`` (default) silently drops every
+    voice turn between STT and the agent loop — symptom we hit in
+    live testing.
+
+    Default behavior matches IRC's pattern: empty env → allow all (the
+    satellite's own adoption state IS the device-level allowlist; the
+    Hermes user gate would be a redundant second perimeter).
+    """
     entry = build_platform_entry()  # 001's _SatellitePlatformAdapter factory
     ctx.register_platform(
         name="satellite_webrtc",
@@ -41,4 +55,7 @@ def register(ctx):
         adapter_factory=entry.adapter_factory,
         check_fn=_aiortc_available,
         install_hint="Requires aiortc/aiohttp/av (already present on this host).",
+        # Auth wiring — see docstring above.
+        allowed_users_env="SATELLITE_ALLOWED_USERS",
+        allow_all_env="SATELLITE_ALLOW_ALL_USERS",
     )

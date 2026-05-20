@@ -350,7 +350,8 @@ class HermesV013Bridge:
         """
         import asyncio
 
-        from .textseg import iter_sentences  # noqa: WPS433
+        # Same fix as streamasm above: textseg lives under aivg_core.webrtc.
+        from ...webrtc.textseg import iter_sentences  # noqa: WPS433
 
         units = iter_sentences(text)
         if not units:
@@ -490,7 +491,11 @@ class HermesV013Bridge:
         """
         import asyncio
 
-        from .streamasm import IncrementalUnitAssembler  # noqa: WPS433
+        # streamasm lives under aivg_core.webrtc, not next to bridge.py.
+        # Was `.streamasm` which silently failed every turn → ModuleNotFoundError
+        # got swallowed by session._respond's task-level error handling,
+        # making the whole STT→agent→TTS chain go dark right after STT.
+        from ...webrtc.streamasm import IncrementalUnitAssembler  # noqa: WPS433
 
         if not user_text.strip():
             return  # empty input → empty / tool-only turn
