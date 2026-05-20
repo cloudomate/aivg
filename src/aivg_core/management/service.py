@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from ..config import SatelliteAdapterConfig
 from ..logsink import LogSink
-from ..models import LogLevel, LogSource, SatelliteConfig
+from ..models import ClientStatus, LogLevel, LogSource, SatelliteConfig
 from ..registry import Registry
 
 
@@ -33,6 +33,11 @@ class ManagementService:
         self._sink = sink
         self._cfg = cfg
         self._ws_subscribers: list[Callable[[dict], None]] = []
+        # Feature 011 US4: OTA orchestration. The OtaService broadcasts
+        # ``ota_apply`` frames over the device WS via the same `_broadcast`
+        # path the rest of the management plane uses.
+        from .ota import OtaService  # noqa: WPS433 (lazy to avoid circular)
+        self._ota = OtaService(sink, broadcast=self._broadcast)
 
     # --- registration & lifecycle (REST + WS register) -------------------
     def register(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -285,18 +290,111 @@ class ManagementService:
         c = self._reg.get_client(device_id)
         return c.config.__dict__ if c else None
 
-    def post_config(self, device_id: str, overrides: dict[str, Any]) -> dict[str, Any] | None:
+    def post_config(
+        self,
+        device_id: str,
+        overrides: dict[str, Any],
+        *,
+        if_match: int | None = None,
+        queue: bool = False,
+    ) -> tuple[int, dict[str, Any]]:
+        """Update a device's running configuration (feature 011 US3, R-11).
+
+        Optimistic concurrency: pass ``if_match=<config_version>``; if the
+        server's current version differs, returns 409 ``config_conflict``.
+        Omitting ``if_match`` is last-writer-wins; ``config_version``
+        always increments.
+
+        Offline-write policy (FR-016): if the device is offline AND
+        ``queue=False`` (the default), refuse with 503 ``device_offline``.
+        With ``queue=True``, enqueue the override and apply it on the
+        next register/heartbeat — the change is acknowledged with 202 and
+        an ``adoption_state`` of the queued snapshot.
+
+        Returns ``(status, payload)`` — the aiohttp wiring lifts these
+        onto the response.
+        """
         c = self._reg.get_client(device_id)
         if c is None:
-            return None
-        c.config = c.config.merged(overrides)
-        self._broadcast(
-            {"type": "config_changed", "device_id": device_id, "config": c.config.__dict__}
-        )
-        return c.config.__dict__
+            return 404, {"error": "unknown_device", "message": f"no adopted device {device_id!r}"}
 
-    def config_schema(self) -> dict[str, Any]:
-        return {"fields": list(SatelliteConfig().__dict__.keys())}
+        # Optimistic concurrency: stale base → 409.
+        if if_match is not None and if_match != c.config_version:
+            return 409, {
+                "error": "config_conflict",
+                "message": (
+                    f"stale If-Match: {if_match} vs current {c.config_version}"
+                ),
+                "current_version": c.config_version,
+            }
+
+        # Offline write policy.
+        if c.status != ClientStatus.ONLINE:
+            if not queue:
+                return 503, {
+                    "error": "device_offline",
+                    "message": (
+                        f"device {device_id!r} is offline; pass ?queue=true to "
+                        "queue the change for the next register/heartbeat"
+                    ),
+                }
+            # Stash on the Registry's queued-writes dict; flushed in heartbeat().
+            self._reg.queue_config_write(device_id, overrides)
+            return 202, {
+                "queued": True,
+                "device_id": device_id,
+                "pending_overrides": overrides,
+            }
+
+        # Apply + persist.
+        c.config = c.config.merged(overrides)
+        c.config_version += 1
+        c.config_updated_at = time.time()
+        # Persistence hook on the registry fires on adopt/delete/post_config —
+        # invoke it explicitly here so the version bump survives a restart.
+        self._reg._persist()  # noqa: SLF001 - feature 011 R-11
+        payload = c.config.__dict__ | {
+            "config_version": c.config_version,
+            "config_updated_at": c.config_updated_at,
+        }
+        self._broadcast(
+            {
+                "type": "config_changed",
+                "device_id": device_id,
+                "config": payload,
+                "config_version": c.config_version,
+            }
+        )
+        return 200, payload
+
+    def config_schema(self, device_id: str | None = None) -> dict[str, Any]:
+        """JSON Schema for the editable fields of ``SatelliteConfig``.
+
+        Same shape for every device type (constitution II — no per-type
+        branching at the dashboard/schema layer). The ``device_id``
+        parameter is accepted for symmetry with the REST route but not
+        consumed in v1.
+        """
+        cfg = SatelliteConfig()
+        properties: dict[str, dict[str, Any]] = {}
+        for field, value in cfg.__dict__.items():
+            t = type(value).__name__
+            mapping = {
+                "str": "string",
+                "int": "integer",
+                "float": "number",
+                "bool": "boolean",
+                "NoneType": "string",  # echo_strategy default is None until set
+            }
+            json_type = mapping.get(t, "string")
+            properties[field] = {"type": json_type, "default": value}
+        return {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "SatelliteConfig",
+            "type": "object",
+            "additionalProperties": True,
+            "properties": properties,
+        }
 
     # --- logs (SSE source) ----------------------------------------------
     def query_logs(self, **filters) -> list[dict[str, Any]]:
@@ -312,18 +410,100 @@ class ManagementService:
             for e in self._sink.query(**filters)
         ]
 
-    # --- commands & OTA (contract completeness; browser has no OTA) ------
-    def command(self, device_id: str, command: str) -> dict[str, Any]:
-        valid = {"reboot", "restart_voice", "restart_manager", "reset_config", "factory_reset"}
-        accepted = command in valid and self._reg.get_client(device_id) is not None
-        if accepted:
-            self._broadcast(
-                {"type": "command_response", "device_id": device_id, "command": command}
-            )
-        return {"accepted": accepted, "scheduled_at": time.time() if accepted else None}
+    # --- commands (feature 011 US5, R-14) -------------------------------
 
-    def ota_check(self, device_id: str) -> dict[str, Any]:
-        return {"update_available": False, "latest_version": None, "changelog_url": None}
+    def command(
+        self, device_id: str, body: dict[str, Any] | str
+    ) -> tuple[int, dict[str, Any]]:
+        """Issue a command to a device.
+
+        Accepts either a string (legacy shape: ``command("d1", "reboot")``)
+        or a body dict (US5 shape: ``command("d1", {"command": "...", "args": {...}})``).
+        Returns ``(status, payload)``:
+
+        * 404 — unknown device
+        * 400 — unknown verb (closed CommandVerb enum, R-14)
+        * 503 — device offline
+        * 202 — accepted; ``command`` frame broadcast to the device WS
+
+        Destructive-confirmation is the CLIENT's job (FR-019) — the
+        server accepts without prompting.
+        """
+        from ..models import CommandVerb  # noqa: WPS433 (lazy)
+
+        # Backward-compat: legacy shape was a bare verb string.
+        if isinstance(body, str):
+            body = {"command": body}
+        verb = body.get("command")
+        args = body.get("args") or {}
+
+        try:
+            verb_enum = CommandVerb(verb)
+        except (ValueError, TypeError):
+            return 400, {
+                "error": "bad_input",
+                "message": f"unknown command verb: {verb!r}",
+            }
+        c = self._reg.get_client(device_id)
+        if c is None:
+            return 404, {"error": "unknown_device", "message": f"no adopted device {device_id!r}"}
+        if c.status != ClientStatus.ONLINE:
+            return 503, {"error": "device_offline", "message": f"{device_id!r} is offline"}
+        # Broadcast the `command` frame on the device WS (control plane).
+        self._broadcast(
+            {
+                "type": "command",
+                "device_id": device_id,
+                "command": verb_enum.value,
+                "args": args,
+            }
+        )
+        self._sink.emit(
+            device_id, LogLevel.INFO, LogSource.SYSTEM,
+            f"command: {verb_enum.value}",
+            {"args": args},
+        )
+        return 202, {
+            "accepted": True,
+            "scheduled_at": time.time(),
+            "command": verb_enum.value,
+        }
+
+    # --- OTA (feature 011 US4) ------------------------------------------
+
+    def ota_check(self, device_id: str) -> tuple[int, dict[str, Any]]:
+        """Returns ``(status, payload)``. 404 unknown, 409 browser
+        (sanctioned divergence), 200 with update flags otherwise.
+        """
+        c = self._reg.get_client(device_id)
+        if c is None:
+            return 404, {"error": "unknown_device", "message": f"no adopted device {device_id!r}"}
+        return self._ota.check(c)
+
+    def ota_apply(self, device_id: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        c = self._reg.get_client(device_id)
+        if c is None:
+            return 404, {"error": "unknown_device", "message": f"no adopted device {device_id!r}"}
+        if c.status != ClientStatus.ONLINE:
+            return 503, {"error": "device_offline", "message": f"{device_id!r} is offline"}
+        version = body.get("version")
+        if not version:
+            return 400, {"error": "bad_input", "message": "version is required"}
+        return self._ota.apply(c, version=version, url=body.get("url"))
+
+    def ota_status_report(
+        self, device_id: str, body: dict[str, Any]
+    ) -> tuple[int, dict[str, Any]]:
+        c = self._reg.get_client(device_id)
+        if c is None:
+            return 404, {"error": "unknown_device", "message": f"no adopted device {device_id!r}"}
+        return self._ota.status_report(c, body)
+
+    def ota_manifest(self, device_id: str) -> tuple[int, dict[str, Any]]:
+        c = self._reg.get_client(device_id)
+        if c is None:
+            return 404, {"error": "unknown_device", "message": f"no adopted device {device_id!r}"}
+        return self._ota.manifest_response(c)
 
     # --- control WS fan-out ---------------------------------------------
     def subscribe_ws(self, cb: Callable[[dict], None]) -> Callable[[], None]:
@@ -373,8 +553,50 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
         return web.json_response(c) if c else web.Response(status=404)
 
     async def _post_cfg(req):
-        c = service.post_config(req.match_info["id"], await req.json())
-        return web.json_response(c) if c else web.Response(status=404)
+        # Feature 011 US3: optional If-Match header (optimistic
+        # concurrency) + ?queue=true (offline-write opt-in).
+        if_match_h = req.headers.get("If-Match")
+        if_match: int | None = None
+        if if_match_h is not None:
+            try:
+                if_match = int(if_match_h)
+            except ValueError:
+                return web.json_response(
+                    {"error": "bad_input", "message": "If-Match must be an integer"},
+                    status=400,
+                )
+        queue = req.query.get("queue") in ("1", "true", "yes")
+        status, payload = service.post_config(
+            req.match_info["id"], await req.json(), if_match=if_match, queue=queue
+        )
+        return web.json_response(payload, status=status)
+
+    async def _config_schema(req):
+        return web.json_response(service.config_schema(req.match_info["id"]))
+
+    # --- OTA (US4) ---------------------------------------------------
+    async def _ota_check(req):
+        status, payload = service.ota_check(req.match_info["id"])
+        return web.json_response(payload, status=status)
+
+    async def _ota_apply(req):
+        status, payload = service.ota_apply(req.match_info["id"], await req.json())
+        return web.json_response(payload, status=status)
+
+    async def _ota_status(req):
+        status, payload = service.ota_status_report(req.match_info["id"], await req.json())
+        # 204 has no body per HTTP spec.
+        if status == 204:
+            return web.Response(status=204)
+        return web.json_response(payload, status=status)
+
+    async def _ota_manifest(req):
+        status, payload = service.ota_manifest(req.match_info["id"])
+        return web.json_response(payload, status=status)
+
+    async def _command(req):
+        status, payload = service.command(req.match_info["id"], await req.json())
+        return web.json_response(payload, status=status)
 
     async def _logs(req):
         # Feature 011 T027: follow=true switches to SSE live tail.
@@ -471,6 +693,12 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
             web.post("/satellite/{id}/adopt", _adopt),
             web.get("/satellite/{id}/config", _get_cfg),
             web.post("/satellite/{id}/config", _post_cfg),
+            web.get("/satellite/{id}/config/schema", _config_schema),
+            web.post("/satellite/{id}/ota/check", _ota_check),
+            web.post("/satellite/{id}/ota/apply", _ota_apply),
+            web.post("/satellite/{id}/ota/status", _ota_status),
+            web.get("/satellite/{id}/ota/manifest", _ota_manifest),
+            web.post("/satellite/{id}/command", _command),
             web.get("/satellite/{id}/logs", _logs),
             web.get("/satellite/logs", _logs),
         ]

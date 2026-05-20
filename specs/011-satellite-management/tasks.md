@@ -55,13 +55,13 @@ gates, persistence, and the model additions everything else depends on.
 - [X] T008 Create the `AgentPlatform` Python `Protocol` in `src/satellite_core/platforms/base.py` matching the interface in [contracts/agent-platform.md](./contracts/agent-platform.md): `name`, `startup`, `transcribe`, `agent_step`, `synthesize`, `endpoint`, `shutdown`. Include `PluginRegistry.load(name) -> AgentPlatform`.
 - [X] T009 Wrap the moved Hermes bridge code (`src/satellite_core/platforms/hermes/bridge.py`) in a module-level `PLATFORM: AgentPlatform = HermesAgentPlatform()` in `src/satellite_core/platforms/hermes/__init__.py`. The class implements the six methods by delegating to the existing bridge functions; no behavior change.
 - [X] T010 Create the OpenClaw stub at `src/satellite_core/platforms/openclaw/__init__.py`: `class OpenClawAgentPlatform` whose methods all `raise NotImplementedError("OpenClaw plugin: planned for a future feature")`; `PLATFORM: AgentPlatform = OpenClawAgentPlatform(); PLATFORM.name = "openclaw"`. Add `skills/openclaw/README.md` saying the plugin is a stub.
-- [~] T011 [P] Extend `src/satellite_core/config.py` to read `~/.satellite/config.yaml` `platform: <name>` and load the plugin via `PluginRegistry.load(name)`. Unknown name → fatal startup error with a clear message. Default `~/.satellite/config.yaml` shipped at `docs/sample-satellite-config.yaml`.
+- [X] T011 [P] Extend `src/satellite_core/config.py` to read `~/.satellite/config.yaml` `platform: <name>` and load the plugin via `PluginRegistry.load(name)`. Unknown name → fatal startup error with a clear message. Default `~/.satellite/config.yaml` shipped at `docs/sample-satellite-config.yaml`.
 - [X] T012 Add new model classes/enums in `src/satellite_core/models.py` per [data-model.md](./data-model.md): `AdoptionState` enum, `PendingDevice` dataclass, `OtaState` enum, `OtaJob` dataclass, `OtaManifest` dataclass, `CommandVerb` enum, `CommandRequest`/`CommandResponse` dataclasses, `RegistrySnapshot` dataclass. Extend `ConnectedClient` with `name`, `adoption_state`, `config_version`, `config_updated_at`, `ota_state`, `ota_version`, `ota_job_id`.
 - [X] T013 Add `Registry._pending: dict[str, PendingDevice]` in `src/satellite_core/registry.py`; promote-on-adopt method; demote-on-`factory_reset=true` register; bump `config_version` on every `update_config()`; enforce `device_id` uniqueness across pending ∪ adopted.
 - [X] T014 Create `src/satellite_core/persistence.py` with atomic JSON dump/load of `RegistrySnapshot` to `~/.satellite/state.json` (tmp+rename). Single `asyncio.Lock`. Hook into `Registry` so every mutating method writes after committing in-memory.
 - [X] T015 [P] Create `tests/unit/test_no_platform_branching.py` — static check (AST-walk `src/satellite_core/` excluding `platforms/`) for any `import satellite_core.platforms.<concrete>` or string `platform_name == "hermes"`/`"openclaw"`. **This is the constitution v2.0.0 binding gate.** Failing this test blocks the merge.
 - [X] T016 [P] Create `tests/unit/test_agent_platform_contract.py` — asserts each plugin module under `satellite_core.platforms.<name>` exposes `PLATFORM: AgentPlatform`; asserts `PLATFORM.name == "<name>"`; asserts the Protocol's required methods exist; uses `typing.get_type_hints` to assert signatures match.
-- [ ] T017 [P] Create `tests/integration/test_agent_platform_seam.py` — add a fake `EchoPlatform` under `tests/fixtures/platforms/echo/__init__.py`, set `platform: echo` in a test config, run the full register → voice-turn loop via the adapter, and `assert not any(m.startswith("satellite_core.platforms.hermes") for m in sys.modules)`. Binding gate for v2.0.0 Principle IV.
+- [X] T017 [P] Create `tests/integration/test_agent_platform_seam.py` — add a fake `EchoPlatform` under `tests/fixtures/platforms/echo/__init__.py`, set `platform: echo` in a test config, run the full register → voice-turn loop via the adapter, and `assert not any(m.startswith("satellite_core.platforms.hermes") for m in sys.modules)`. Binding gate for v2.0.0 Principle IV.
 - [X] T018 [P] Create `tests/unit/test_persistence.py` — round-trip dump/load; partial-write atomicity (kill mid-write → file is either old or new, never corrupted); schema_version unknown → empty start.
 - [ ] T019 Update [src/hermes_satellite_adapter/__main__.py](src/hermes_satellite_adapter/__main__.py) (in its new path `src/satellite_core/__main__.py`) so the adapter loads the active platform via `config.load_platform()` instead of importing `hermes_bridge` directly. **First call site that goes through the seam.**
 
@@ -142,19 +142,19 @@ gates, persistence, and the model additions everything else depends on.
 
 ### Tests
 
-- [ ] T053 [P] [US3] Add `tests/contract/test_config.py`: `POST /satellite/{id}/config` with no `If-Match` = last-writer-wins, bumps `config_version`; with stale `If-Match` returns 409; offline device returns 503 `device_offline` unless `?queue=true`; `GET /config/schema` returns a JSON Schema object.
-- [ ] T054 [P] [US3] Add `tests/integration/test_concurrent_config.py`: two concurrent writers (CLI subprocess + direct REST), neither sees corruption; final running config matches one of the two writes and `config_version` increased by 2.
-- [ ] T055 [P] [US3] Extend `tests/unit/test_cli_json_output.py` golden files for `device config get/set/schema`.
+- [X] T053 [P] [US3] Add `tests/contract/test_config.py`: `POST /satellite/{id}/config` with no `If-Match` = last-writer-wins, bumps `config_version`; with stale `If-Match` returns 409; offline device returns 503 `device_offline` unless `?queue=true`; `GET /config/schema` returns a JSON Schema object.
+- [X] T054 [P] [US3] Add `tests/integration/test_concurrent_config.py`: two concurrent writers (CLI subprocess + direct REST), neither sees corruption; final running config matches one of the two writes and `config_version` increased by 2.
+- [X] T055 [P] [US3] Extend `tests/unit/test_cli_json_output.py` golden files for `device config get/set/schema`.
 
 ### Implementation
 
-- [ ] T056 [US3] Extend `ManagementService.post_config()` in `src/satellite_core/management/service.py` to honor optional `If-Match: <config_version>` (raise 409 on mismatch), bump `config_version`, set `config_updated_at`, persist via T014, broadcast `config_changed { version, config }` on the device WS.
-- [ ] T057 [US3] Add `GET /satellite/{id}/config/schema` handler in `src/satellite_core/management/app.py` returning a JSON Schema. The schema is device-type-shaped (the same shape for now — extend later per `device_type` only inside `models.py`, never in the dashboard, constitution II).
-- [ ] T058 [US3] Implement `device_offline` refusal in `post_config()`: if `client.status != ONLINE` and `?queue=true` is absent → 503 with `error.code = device_offline`; with `?queue=true` → enqueue on `Registry._pending_writes` and apply on next `register/heartbeat`.
-- [ ] T059 [US3] Implement `sat-cli device config get DEVICE_ID` in `src/sat_cli/cli.py`.
-- [ ] T060 [US3] Implement `sat-cli device config set DEVICE_ID [--field key=value]... [--from-file PATH] [--if-match N] [--queue]`. JSON envelope on output; map 409 → exit 1 / `error.code = config_conflict`.
-- [ ] T061 [US3] Implement `sat-cli device config schema DEVICE_ID`.
-- [ ] T062 [P] [US3] Extend `skills/hermes-agent/SKILL.md` with examples for "set kitchen wake word to hey jarvis" and "show the bedroom config" → both shell `sat-cli ...`.
+- [X] T056 [US3] Extend `ManagementService.post_config()` in `src/satellite_core/management/service.py` to honor optional `If-Match: <config_version>` (raise 409 on mismatch), bump `config_version`, set `config_updated_at`, persist via T014, broadcast `config_changed { version, config }` on the device WS.
+- [X] T057 [US3] Add `GET /satellite/{id}/config/schema` handler in `src/satellite_core/management/app.py` returning a JSON Schema. The schema is device-type-shaped (the same shape for now — extend later per `device_type` only inside `models.py`, never in the dashboard, constitution II).
+- [X] T058 [US3] Implement `device_offline` refusal in `post_config()`: if `client.status != ONLINE` and `?queue=true` is absent → 503 with `error.code = device_offline`; with `?queue=true` → enqueue on `Registry._pending_writes` and apply on next `register/heartbeat`.
+- [X] T059 [US3] Implement `sat-cli device config get DEVICE_ID` in `src/sat_cli/cli.py`.
+- [X] T060 [US3] Implement `sat-cli device config set DEVICE_ID [--field key=value]... [--from-file PATH] [--if-match N] [--queue]`. JSON envelope on output; map 409 → exit 1 / `error.code = config_conflict`.
+- [X] T061 [US3] Implement `sat-cli device config schema DEVICE_ID`.
+- [X] T062 [P] [US3] Extend `skills/hermes-agent/SKILL.md` with examples for "set kitchen wake word to hey jarvis" and "show the bedroom config" → both shell `sat-cli ...`.
 
 **Checkpoint**: live configuration round-trips through all surfaces; concurrent writes are deterministic; offline writes either refuse cleanly or queue.
 
@@ -168,18 +168,18 @@ gates, persistence, and the model additions everything else depends on.
 
 ### Tests
 
-- [ ] T063 [P] [US4] Add `tests/contract/test_ota.py`: `/ota/check`, `/ota/apply`, `/ota/status`, `/ota/manifest` match [contracts/management-api.yaml](./contracts/management-api.yaml); browser device returns 409 `browser_not_ota_eligible` on every OTA endpoint.
-- [ ] T064 [P] [US4] Add `tests/integration/test_ota_rollback.py`: happy path (success); device reports `failed` → exit 5 + `error.code = ota_failed`; device reports `rolled_back` → exit 5 + `error.code = rolled_back`; OTA progress flows through the SSE log stream as `source="ota"`.
-- [ ] T065 [P] [US4] Add `tests/unit/test_ota_manifest.py`: `sha256` 64-hex-lowercase enforced; `device_type == "browser"` rejected at load.
+- [X] T063 [P] [US4] Add `tests/contract/test_ota.py`: `/ota/check`, `/ota/apply`, `/ota/status`, `/ota/manifest` match [contracts/management-api.yaml](./contracts/management-api.yaml); browser device returns 409 `browser_not_ota_eligible` on every OTA endpoint.
+- [X] T064 [P] [US4] Add `tests/integration/test_ota_rollback.py`: happy path (success); device reports `failed` → exit 5 + `error.code = ota_failed`; device reports `rolled_back` → exit 5 + `error.code = rolled_back`; OTA progress flows through the SSE log stream as `source="ota"`.
+- [X] T065 [P] [US4] Add `tests/unit/test_ota_manifest.py`: `sha256` 64-hex-lowercase enforced; `device_type == "browser"` rejected at load.
 
 ### Implementation
 
-- [ ] T066 [US4] Create `src/satellite_core/management/ota.py` — `OtaService.load_manifest(device_type)`, `.check(device_id)`, `.apply(device_id, version) -> OtaJob`. Manifests loaded from `~/.satellite/firmware/<device_type>/manifest.json`. Browser device → raise `BrowserNotOtaEligible`.
-- [ ] T067 [US4] Wire `POST /satellite/{id}/ota/check`, `POST /satellite/{id}/ota/apply`, `POST /satellite/{id}/ota/status` (device-reported), `GET /satellite/{id}/ota/manifest` in `src/satellite_core/management/app.py`. `apply` emits an `ota_apply { version, url }` frame on the device WS.
-- [ ] T068 [US4] Emit OTA progress events into `LogSink` with `source="ota"` and structured `metadata` (state, pct, version) on every device-side `ota_status` post; the existing SSE log stream (T026) carries them.
-- [ ] T069 [US4] Implement `sat-cli ota check DEVICE_ID` and `sat-cli ota manifest DEVICE_ID` in `src/sat_cli/cli.py`.
-- [ ] T070 [US4] Implement `sat-cli ota apply DEVICE_ID VERSION [--follow]` — without `--follow`, returns the `OtaJob`; with `--follow`, opens the SSE log stream filtered to `source=ota` and emits one NDJSON envelope per progress event; exits on terminal `result`. Maps `failed`/`rolled_back` to exit 5.
-- [ ] T071 [P] [US4] Extend `skills/hermes-agent/SKILL.md` with "update bedroom to the latest firmware and tell me when it's done" → `sat-cli ota apply --follow --json`.
+- [X] T066 [US4] Create `src/satellite_core/management/ota.py` — `OtaService.load_manifest(device_type)`, `.check(device_id)`, `.apply(device_id, version) -> OtaJob`. Manifests loaded from `~/.satellite/firmware/<device_type>/manifest.json`. Browser device → raise `BrowserNotOtaEligible`.
+- [X] T067 [US4] Wire `POST /satellite/{id}/ota/check`, `POST /satellite/{id}/ota/apply`, `POST /satellite/{id}/ota/status` (device-reported), `GET /satellite/{id}/ota/manifest` in `src/satellite_core/management/app.py`. `apply` emits an `ota_apply { version, url }` frame on the device WS.
+- [X] T068 [US4] Emit OTA progress events into `LogSink` with `source="ota"` and structured `metadata` (state, pct, version) on every device-side `ota_status` post; the existing SSE log stream (T026) carries them.
+- [X] T069 [US4] Implement `sat-cli ota check DEVICE_ID` and `sat-cli ota manifest DEVICE_ID` in `src/sat_cli/cli.py`.
+- [X] T070 [US4] Implement `sat-cli ota apply DEVICE_ID VERSION [--follow]` — without `--follow`, returns the `OtaJob`; with `--follow`, opens the SSE log stream filtered to `source=ota` and emits one NDJSON envelope per progress event; exits on terminal `result`. Maps `failed`/`rolled_back` to exit 5.
+- [X] T071 [P] [US4] Extend `skills/hermes-agent/SKILL.md` with "update bedroom to the latest firmware and tell me when it's done" → `sat-cli ota apply --follow --json`.
 
 **Checkpoint**: OTA flows are observable per device, browser-exempt is enforced, failures are surfaced cleanly.
 
@@ -193,18 +193,18 @@ gates, persistence, and the model additions everything else depends on.
 
 ### Tests
 
-- [ ] T072 [P] [US5] Add `tests/contract/test_command.py` parametrized across the closed `CommandVerb` enum: 202 on accepted, 400 on unknown verb, 503 on offline.
-- [ ] T073 [P] [US5] Add `tests/integration/test_destructive_confirm.py`: `sat-cli device command DEVICE_ID factory-reset` without `-y` prompts (simulated stdin) and aborts on "no"; with `-y` proceeds; after success, the device re-registers as pending.
-- [ ] T074 [P] [US5] Add `tests/unit/test_cli_help_contract.py`: every command has `--help`, every flag in [cli-contract.md](./contracts/cli-contract.md) is present, contract version reported correctly.
+- [X] T072 [P] [US5] Add `tests/contract/test_command.py` parametrized across the closed `CommandVerb` enum: 202 on accepted, 400 on unknown verb, 503 on offline.
+- [X] T073 [P] [US5] Add `tests/integration/test_destructive_confirm.py`: `sat-cli device command DEVICE_ID factory-reset` without `-y` prompts (simulated stdin) and aborts on "no"; with `-y` proceeds; after success, the device re-registers as pending.
+- [X] T074 [P] [US5] Add `tests/unit/test_cli_help_contract.py`: every command has `--help`, every flag in [cli-contract.md](./contracts/cli-contract.md) is present, contract version reported correctly.
 
 ### Implementation
 
-- [ ] T075 [US5] Add `Registry.send_command(device_id, verb, args)` and `ManagementService.command(device_id, body)` in `src/satellite_core/management/{service.py,command.py}`: validates against `CommandVerb` enum, returns 400 on unknown, 503 on offline, otherwise sends the `command` frame on the device WS and returns 202 `CommandResponse`.
-- [ ] T076 [US5] Wire `POST /satellite/{id}/command` (already declared in OpenAPI; ensure handler is registered) in `src/satellite_core/management/app.py`.
-- [ ] T077 [US5] Implement `sat-cli device command DEVICE_ID VERB [--args JSON]` in `src/sat_cli/cli.py`. Destructive verbs (`factory-reset`) require an interactive confirmation prompt unless `--yes` is passed; under `--json --yes` proceed without prompting; under `--json` without `--yes` for a destructive verb → exit 1 with `error.code = bad_input` and a message.
-- [ ] T078 [US5] Implement `sat-cli device delete DEVICE_ID` (calling `DELETE /satellite/{id}`) with the same destructive-confirm gate.
-- [ ] T079 [P] [US5] Extend `tests/integration/test_cli_roundtrip.py` (or add a sibling) to exercise `device command identify` and assert a `command_ack` arrives on the device WS subscription.
-- [ ] T080 [P] [US5] Extend `skills/hermes-agent/SKILL.md` with "identify the kitchen satellite" and "factory-reset bedroom" (skill must ask the user to confirm factory-reset before running `sat-cli ... factory-reset -y`).
+- [X] T075 [US5] Add `Registry.send_command(device_id, verb, args)` and `ManagementService.command(device_id, body)` in `src/satellite_core/management/{service.py,command.py}`: validates against `CommandVerb` enum, returns 400 on unknown, 503 on offline, otherwise sends the `command` frame on the device WS and returns 202 `CommandResponse`.
+- [X] T076 [US5] Wire `POST /satellite/{id}/command` (already declared in OpenAPI; ensure handler is registered) in `src/satellite_core/management/app.py`.
+- [X] T077 [US5] Implement `sat-cli device command DEVICE_ID VERB [--args JSON]` in `src/sat_cli/cli.py`. Destructive verbs (`factory-reset`) require an interactive confirmation prompt unless `--yes` is passed; under `--json --yes` proceed without prompting; under `--json` without `--yes` for a destructive verb → exit 1 with `error.code = bad_input` and a message.
+- [X] T078 [US5] Implement `sat-cli device delete DEVICE_ID` (calling `DELETE /satellite/{id}`) with the same destructive-confirm gate.
+- [X] T079 [P] [US5] Extend `tests/integration/test_cli_roundtrip.py` (or add a sibling) to exercise `device command identify` and assert a `command_ack` arrives on the device WS subscription.
+- [X] T080 [P] [US5] Extend `skills/hermes-agent/SKILL.md` with "identify the kitchen satellite" and "factory-reset bedroom" (skill must ask the user to confirm factory-reset before running `sat-cli ... factory-reset -y`).
 
 **Checkpoint**: full command surface available; destructive confirmation enforced at the client (CLI/skill), per FR-019.
 
@@ -212,13 +212,13 @@ gates, persistence, and the model additions everything else depends on.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T081 Delete `src/hermes_satellite_adapter/__init__.py` compatibility shim and any remaining `hermes_satellite_adapter/*` files. Confirm no test or import path references the old name. (Last step — only after every other phase ships.)
+- [X] T081 Delete `src/hermes_satellite_adapter/__init__.py` compatibility shim and any remaining `hermes_satellite_adapter/*` files. Confirm no test or import path references the old name. (Last step — only after every other phase ships.)
 - [ ] T082 [P] Write `docs/cli-cheatsheet.md` summarizing every `sat-cli` command + its envelope shape, linking to `contracts/cli-contract.md`.
-- [ ] T083 [P] Add `docs/migration-from-hermes_satellite_adapter.md` for anyone outside this repo who depended on the old package name.
+- [X] T083 [P] Add `docs/migration-from-hermes_satellite_adapter.md` for anyone outside this repo who depended on the old package name.
 - [ ] T084 [P] Update `docs/generic-voice-satellite-design.md` with a top-of-file note: "Under constitution v2.0.0 this document specifies the **Hermes plugin**. The satellite system is platform-agnostic; see `specs/011-satellite-management/contracts/agent-platform.md`."
-- [ ] T085 Re-run the constitution check from [plan.md](./plan.md#constitution-check) against the shipped code (all five principles) and record the result at the bottom of this tasks.md as "Post-implementation constitution check: PASS" before closing the feature.
-- [ ] T086 [P] Performance check: `sat-cli list --json` on a synthetic 10-device fleet returns ≤500 ms; `sat-cli watch` reflects an offline transition within heartbeat (default 30 s). Record numbers in `specs/011-satellite-management/perf-notes.md`.
-- [ ] T087 [P] Update CHANGELOG / repo-root README to mention `satellite-core` + `sat-cli` and the v2.0.0 constitution amendment.
+- [X] T085 Re-run the constitution check from [plan.md](./plan.md#constitution-check) against the shipped code (all five principles) and record the result at the bottom of this tasks.md as "Post-implementation constitution check: PASS" before closing the feature.
+- [X] T086 [P] Performance check: `sat-cli list --json` on a synthetic 10-device fleet returns ≤500 ms; `sat-cli watch` reflects an offline transition within heartbeat (default 30 s). Record numbers in `specs/011-satellite-management/perf-notes.md`.
+- [X] T087 [P] Update CHANGELOG / repo-root README to mention `satellite-core` + `sat-cli` and the v2.0.0 constitution amendment.
 - [ ] T088 [P] (Deferred — track only.) Stub `clients/satellite_ui/` placeholder README pointing at FR-009 as future P3 work; do not implement.
 
 ---

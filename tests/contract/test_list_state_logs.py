@@ -35,16 +35,23 @@ def test_config_post_pushes_config_changed_over_ws(tmp_path):
     svc.register({"device_id": "d1", "device_type": "browser"})
     seen = []
     svc.subscribe_ws(seen.append)
-    out = svc.post_config("d1", {"wake_word": "computer"})
+    # Feature 011 US3: post_config now returns (status, payload).
+    status, out = svc.post_config("d1", {"wake_word": "computer"})
+    assert status == 200
     assert out["wake_word"] == "computer"
+    assert out["config_version"] == 1  # bumped from default 0
     assert any(m["type"] == "config_changed" for m in seen)
 
 
 def test_command_validation(tmp_path):
     svc = _svc(tmp_path)
     svc.register({"device_id": "d1", "device_type": "browser"})
-    assert svc.command("d1", "factory_reset")["accepted"] is True
-    assert svc.command("d1", "nope")["accepted"] is False
+    # Feature 011 US5: command returns (status, payload) and validates
+    # against the closed CommandVerb enum (R-14).
+    status, payload = svc.command("d1", {"command": "factory_reset"})
+    assert status == 202 and payload["accepted"] is True
+    status, payload = svc.command("d1", {"command": "nope"})
+    assert status == 400 and payload["error"] == "bad_input"
 
 
 def test_gateway_log_file_written(tmp_path):

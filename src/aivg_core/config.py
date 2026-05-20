@@ -33,10 +33,20 @@ class SatelliteAdapterConfig:
     # /adopt endpoint refuses with 409 device_limit_reached past this. The
     # pending list is unrestricted (R-12).
     device_limit: int = 10
+    # Feature 011 T011 (closes Phase 2 partial) ---------------------------
+    # Which agent-platform plugin to load via
+    # ``aivg_core.platforms.base.PluginRegistry``. Defaults to "hermes"
+    # (the v1 canonical plugin); set to "openclaw" (stub) or a future
+    # plugin name to switch.
+    platform: str = "hermes"
 
     @staticmethod
     def from_mapping(data: dict[str, Any] | None) -> "SatelliteAdapterConfig":
         block = (data or {}).get("satellite", {}) or {}
+        # Feature 011 T011: top-level `platform:` key wins over a key
+        # nested inside `satellite:` — the platform selection is a
+        # whole-system decision, not a satellite-block detail.
+        platform = (data or {}).get("platform") or block.get("platform", "hermes")
         cfg = SatelliteAdapterConfig(
             enabled=bool(block.get("enabled", False)),
             management_port=int(block.get("management_port", 8643)),
@@ -46,9 +56,20 @@ class SatelliteAdapterConfig:
             default_config=dict(block.get("default_config", {})),
             auto_adopt_on_register=bool(block.get("auto_adopt_on_register", True)),
             device_limit=int(block.get("device_limit", 10)),
+            platform=str(platform),
         )
         cfg.validate()
         return cfg
+
+    def load_platform(self):  # noqa: ANN201 - structural; returns AgentPlatform
+        """Resolve and return the configured AgentPlatform plugin.
+
+        Imports lazily to avoid forcing the plugin discovery at config-
+        parse time. Feature 011 T011 closure.
+        """
+        from .platforms.base import PluginRegistry  # noqa: WPS433
+
+        return PluginRegistry.load(self.platform)
 
     def validate(self) -> None:
         if self.management_port == self.webrtc_port:
