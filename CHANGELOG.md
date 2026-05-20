@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — Note on deploy/*.sh after the rebrand
+
+The shell-script deploy infrastructure (`deploy/deploy-local.sh`,
+`deploy/deploy-to-hermes.sh`, `deploy/parity-check.sh`,
+`deploy/rollback.sh`, `deploy/plugin/`) is **broken by the AIVG
+rebrand and not fixed in feature 012** — by design. The scripts
+predate constitution v2.0.0 / Principle IV and are Hermes-hardcoded;
+patching them to point at `aivg_core` would perpetuate the wrong
+layer. The replacement — a CLI-based `aivg setup` that detects the
+active agent platform and dispatches to platform-specific install
+logic inside the plugin seam — is recorded as the next feature in
+[specs/012-aivg-branding/followup-cli-deploy.md](specs/012-aivg-branding/followup-cli-deploy.md).
+
+In-process smoke (`python -m aivg_core --dev-fake-bridge` +
+`aivg list / device get / logs --follow`) remains the working local-
+test path for AIVG-side work that doesn't need a real upstream
+agent-platform gateway.
+
 ## Unreleased — AIVG compat-shim removal (feature 012 Phase 9)
 
 User-requested early closure of the compat-shim window opened by the
