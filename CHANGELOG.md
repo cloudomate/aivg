@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased — AIVG compat-shim removal (feature 012 Phase 9)
+
+User-requested early closure of the compat-shim window opened by the
+AIVG rebrand. The "one release after" guideline in the rebrand spec was
+explicitly waived — there were no external consumers depending on the
+legacy import paths or the `sat-cli` binary, so the window collapses.
+
+### Removed
+
+* Python package `satellite_core` — `ImportError` now.
+* Python package `sat_cli` — `ImportError` now.
+* Python package `hermes_satellite_adapter` (two-hop shim from
+  feature 011) — `ImportError` now.
+* CLI binary `sat-cli` — the `[project.scripts]` entry is gone; the
+  `aivg` binary is the only entry point.
+* `tests/unit/test_compat_shim.py` — its premise (the shims exist) no
+  longer holds.
+* The three compat-shim `DeprecationWarning` filters from
+  `pyproject.toml` `filterwarnings`.
+* The compat-shim entries from `docs/rebrand-allow-list.md`.
+
+### Retained
+
+* `aivg_core.persistence.migrate_legacy_data_dir()` — the one-shot
+  `~/.satellite/` → `~/.aivg/` first-run migration helper stays.
+  It's harmless to keep and still helps any operator who has a legacy
+  data directory on disk.
+* `tests/unit/test_persistence_migration.py` — verifies the migration
+  helper above.
+* The Hermes-plugin's gateway-side registration name
+  (`plugin_name="hermes_satellite_adapter"` in
+  `aivg_core/adapter.py`) — that's an externally-known identifier to
+  the upstream Hermes gateway plugin registry, **not** a Python
+  import. Renaming it would break the Hermes integration; it stays.
+
+### Tests at this checkpoint
+
+188 passed + 1 xpassed (was 193 before Phase 9; net drop of 5 from
+the deleted `test_compat_shim.py`).
+
+### Smoke verification
+
+```
+python -c "import satellite_core"          → ModuleNotFoundError
+python -c "import sat_cli"                 → ModuleNotFoundError
+python -c "import hermes_satellite_adapter" → ModuleNotFoundError
+python -m aivg_cli.cli --json --version    → {"ok":true,"data":{"version":"0.2.0","contract_version":"1.0.0"},…}
+```
+
+`--contract-version` is still `1.0.0`. Removing the shims is **not** a
+contract bump (FR-007/FR-008 still hold byte-for-byte).
+
 ## Unreleased — AIVG rebrand (feature 012)
 
 **Product renamed**: Hermes Voice → **AIVG (AI Voice Gateway)**.

@@ -216,14 +216,34 @@ Phase 8 (Polish, T039–T044)
 5. **Phase 7** (US5 — lint) is the safety net that catches any miss in Phases 3 and 6.
 6. **Phase 8** is the close-out — full test sweep + smoke tests + follow-up tracking.
 
+## Phase 9: Compat-shim removal (user-requested, early)
+
+**Purpose**: Execute the follow-up tracked at
+[followup-shim-removal.md](./followup-shim-removal.md) — delete the
+four compat shims now rather than waiting for the next release. User
+explicitly opted in (the spec's "one release window" Assumption was a
+guideline, not a hard rule).
+
+- [X] T045 Delete `src/satellite_core/` entirely (the cached-DW shim from T010 + its `platforms/`, `webrtc/`, `management/`, `platforms/hermes/` sub-shims).
+- [X] T046 Delete `src/sat_cli/` entirely (the cached-DW shim from T011 and the `legacy_app` dispatcher from T011).
+- [X] T047 Delete `src/hermes_satellite_adapter/` entirely (the two-hop shim refreshed in T012). The Hermes-plugin's gateway-side registration name (`plugin_name="hermes_satellite_adapter"` in `aivg_core/adapter.py`) is **not** touched — that's an externally-known identifier to the upstream Hermes gateway, distinct from the Python import.
+- [X] T048 Update [pyproject.toml](pyproject.toml): drop the `sat-cli = "sat_cli.cli:legacy_app"` entry from `[project.scripts]`; remove `satellite_core*`, `sat_cli*`, `hermes_satellite_adapter*` from `[tool.setuptools.packages.find].include`; remove the three `filterwarnings` entries that were silencing shim DeprecationWarnings.
+- [X] T049 Delete `tests/unit/test_compat_shim.py` — its premise no longer applies (the shims it tested no longer exist; the import itself would `ImportError`). The migration test (`test_persistence_migration.py`) **stays** because the one-shot `~/.satellite/`→`~/.aivg/` migration helper is kept beyond shim removal (harmless retention helps any operator who still has a legacy data dir).
+- [X] T050 [P] Trim [docs/rebrand-allow-list.md](docs/rebrand-allow-list.md): remove the four compat-shim path entries (`src/satellite_core/__init__.py`, `src/sat_cli/__init__.py`, `src/sat_cli/cli.py`, `src/hermes_satellite_adapter/__init__.py`); the orphaned-pattern guard in the lint test will catch leftover entries.
+- [X] T051 [P] Refresh stale prose: in `src/aivg_core/__main__.py` (docstring + `argparse.prog`) replace `hermes_satellite_adapter` → `aivg_core`; in `src/aivg_cli/cli.py` drop the now-stale "(see `src/sat_cli/cli.py`)" mention; in `tests/unit/test_media_framer.py` docstring update `hermes_satellite_adapter.media` → `aivg_core.webrtc.media`.
+- [X] T052 Smoke-test the removal: `python -c "import satellite_core"` returns `ImportError`; same for `sat_cli` and `hermes_satellite_adapter`. `aivg --json --version` still returns the envelope with `contract_version == "1.0.0"`.
+- [X] T053 Run the full suite — expected drop of 5 tests (the test_compat_shim cases), so the count goes from 193 → ~188 passing, +1 xpassed. Rebrand-lint stays green (its allow-list got trimmed, no new offenders).
+- [X] T054 [P] Update [CHANGELOG.md](CHANGELOG.md) with a new top-of-file entry noting the shim removal (one release earlier than originally scheduled).
+- [X] T055 [P] Update [followup-shim-removal.md](./followup-shim-removal.md) with a "Status: DONE" header pointing at the commit that lands this phase.
+
+**Total task count (with Phase 9)**: 55 (44 + 11).
+
 ## Format validation
 
 All tasks above follow `- [ ] T### [P?] [Story?] Description with file path`:
 
 - ✅ Checkbox: every line begins `- [ ]`.
-- ✅ Task ID: T001 → T044 sequential.
+- ✅ Task ID: T001 → T055 sequential.
 - ✅ [P] marker: present on parallelizable tasks only.
-- ✅ [Story] label: present on US1–US5 tasks only (T016–T038); absent on Setup (T001–T005), Foundational (T006–T015), Polish (T039–T044).
+- ✅ [Story] label: present on US1–US5 tasks only (T016–T038); absent on Setup (T001–T005), Foundational (T006–T015), Polish (T039–T044), and the user-requested shim-removal addendum (T045–T055).
 - ✅ Description includes a concrete file path or directory for every implementation task.
-
-**Total task count**: 44 (Setup 5 · Foundational 10 · US1 9 · US2 2 · US3 5 · US4 4 · US5 3 · Polish 6).

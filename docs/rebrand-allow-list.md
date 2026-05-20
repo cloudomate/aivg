@@ -30,19 +30,17 @@ docs/rebrand-allow-list.md
 
 # === Lint scanner + its companion tests ===
 tests/unit/test_no_legacy_branding.py
-tests/unit/test_compat_shim.py
 # Tests that PROVE the rebrand happened need the legacy string as a
 # search needle in `assert "Hermes Voice" not in …`-style assertions.
 tests/unit/test_cli_tagline.py
 tests/unit/test_constitution_principles_byte_equiv.py
 tests/contract/test_rebrand_invariants.py
 tests/fixtures/constitution_principles_normalized.md
+# (test_compat_shim.py was deleted in Phase 9 along with the shims.)
 
-# === Compat shims (reference both names by design, FR-003/FR-004) ===
-src/satellite_core/__init__.py
-src/sat_cli/__init__.py
-src/sat_cli/cli.py
-src/hermes_satellite_adapter/__init__.py
+# (Compat shims removed in feature 012 Phase 9 / T045–T047 — the
+# allow-list entries for src/satellite_core/, src/sat_cli/, and
+# src/hermes_satellite_adapter/ are no longer needed.)
 
 # === Historical reference (single-mention "formerly Hermes Voice") ===
 # These living docs each mention the old name exactly once for new

@@ -2,7 +2,7 @@
 
 AIVG (AI Voice Gateway) management CLI — platform-neutral
 (constitution v2.0.1 Principle IV). The legacy binary name ``sat-cli``
-is kept as a one-release compat alias (see ``src/sat_cli/cli.py``).
+was removed in feature 012 Phase 9; consumers should use ``aivg``.
 
 Contract: ``specs/011-satellite-management/contracts/cli-contract.md``.
 """

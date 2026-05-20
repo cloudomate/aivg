@@ -1,7 +1,12 @@
-# Follow-up: remove the AIVG compat shims (next release)
+# Follow-up: remove the AIVG compat shims
+
+**Status**: ✅ **DONE** — executed early in feature 012 Phase 9
+(T045–T055) at user request, rather than waiting for the next release.
+See `CHANGELOG.md` "AIVG compat-shim removal" entry and the commit
+that closes this file.
 
 **Source**: feature 012 task T043, [quickstart.md](./quickstart.md#removing-the-compat-shims-next-release).
-**Owner**: next feature after 012.
+**Original owner**: next feature after 012 (collapsed into 012 Phase 9).
 
 The AIVG rebrand kept four compat shims alive for one release. They go
 together in a single follow-up PR:

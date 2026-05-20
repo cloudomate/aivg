@@ -29,25 +29,19 @@ dev = [
 
 [project.scripts]
 aivg = "aivg_cli.cli:app"
-# Legacy alias — one-release compat (feature 012 FR-004). Dispatches to
-# `aivg` with one stderr deprecation notice per process. Removed in the
-# next release.
-sat-cli = "sat_cli.cli:legacy_app"
+# (Legacy `sat-cli` alias was removed in feature 012 Phase 9 / T048.
+# The compat-shim window closed with the shim deletion.)
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["aivg_core*", "aivg_cli*", "satellite_core*", "sat_cli*", "hermes_satellite_adapter*"]
+include = ["aivg_core*", "aivg_cli*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
-filterwarnings = [
-    # Silence compat-shim DeprecationWarnings during tests.
-    "ignore:hermes_satellite_adapter is renamed:DeprecationWarning",
-    "ignore:satellite_core is renamed:DeprecationWarning",
-    "ignore:sat_cli is renamed:DeprecationWarning",
-]
+# (Compat-shim DeprecationWarning filters removed in feature 012
+# Phase 9 — the shims they silenced no longer exist.)
 
 [tool.ruff]
 line-length = 100

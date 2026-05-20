@@ -4,7 +4,7 @@ aiortc/av are not local test deps, so the real WebRTC path is host-proven
 (constitution V). What *is* deterministically testable without the media
 stack — splitting an arbitrary PCM byte stream into uniform 20 ms frames,
 remainder carry-over, and silence-padded flush — lives in
-``hermes_satellite_adapter.media`` and is fully exercised here.
+``aivg_core.webrtc.media`` and is fully exercised here.
 """
 
 import pytest

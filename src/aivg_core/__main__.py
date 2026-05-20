@@ -1,7 +1,8 @@
-"""Dev entrypoint: `python -m hermes_satellite_adapter --dev-fake-bridge`.
+"""Dev entrypoint: `python -m aivg_core --dev-fake-bridge`.
 
-Local/test harness ONLY. In production the adapter is loaded by the Hermes
-gateway (see ``adapter.register`` / VG-4), never started this way.
+Local/test harness ONLY. In production the adapter is loaded by the
+active agent-platform gateway (v1: Hermes; see ``adapter.register``),
+never started this way.
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ async def _amain(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(prog="hermes_satellite_adapter")
+    p = argparse.ArgumentParser(prog="aivg_core")
     p.add_argument("--dev-fake-bridge", action="store_true")
     args = p.parse_args()
     return asyncio.run(_amain(args))
