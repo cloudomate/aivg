@@ -120,6 +120,30 @@ class Registry:
             pending.touch()
         return pending
 
+    # --- demotion (factory_reset path, T047) ----------------------------
+    def demote_to_pending(
+        self,
+        device_id: str,
+        *,
+        device_type: str,
+        firmware_version: str = "",
+        ip_address: str = "",
+    ) -> PendingDevice:
+        """An adopted device announces ``factory_reset=True`` on register:
+        drop the persisted client record and re-create as pending so the
+        operator must re-claim it (R-7)."""
+        if device_id in self._clients:
+            c = self._clients.pop(device_id)
+            if c.active_session_id:
+                self._sessions.pop(c.active_session_id, None)
+            self._persist()
+        return self.register_pending(
+            device_id=device_id,
+            device_type=device_type,
+            firmware_version=firmware_version,
+            ip_address=ip_address,
+        )
+
     # --- adoption (US2 entry point) -------------------------------------
     def list_pending(self) -> list[PendingDevice]:
         return list(self._pending.values())

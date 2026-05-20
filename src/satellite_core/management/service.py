@@ -29,27 +29,167 @@ class ManagementService:
 
     # --- registration & lifecycle (REST + WS register) -------------------
     def register(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Device-driven register.
+
+        Behavior is gated by ``cfg.auto_adopt_on_register`` (feature 011 US2):
+
+        * ``True`` (default, back-compat) — new device is added directly to
+          the adopted registry with a placeholder name. Existing voice-plane
+          tests depend on this.
+        * ``False`` — new device lands as ``PendingDevice``; an operator must
+          POST ``/satellite/{id}/adopt`` to promote it. Same response shape
+          either way; ``adoption_state`` in the payload tells the caller
+          which path was taken.
+
+        ``factory_reset=True`` always demotes an adopted record back to
+        pending and discards the persisted config (R-7), regardless of
+        ``auto_adopt_on_register``.
+        """
         device_id = body["device_id"]
-        client = self._reg.register(
-            device_id=device_id,
-            device_type=body.get("device_type", "browser"),
-            firmware_version=body.get("firmware_version", ""),
-            ip_address=body.get("ip_address", ""),
-            config=SatelliteConfig(**self._cfg.default_config)
-            if self._cfg.default_config
-            else SatelliteConfig(),
-        )
+        device_type = body.get("device_type", "browser")
+        firmware_version = body.get("firmware_version", "")
+        ip_address = body.get("ip_address", "")
+        factory_reset = bool(body.get("factory_reset", False))
+
+        adoption_state: str
+        if factory_reset and self._reg.get_client(device_id) is not None:
+            # Adopted → demote back to pending; drop persisted config.
+            self._reg.demote_to_pending(
+                device_id, device_type=device_type,
+                firmware_version=firmware_version, ip_address=ip_address,
+            )
+            adoption_state = "pending"
+        elif self._cfg.auto_adopt_on_register and not factory_reset:
+            client = self._reg.register(
+                device_id=device_id,
+                device_type=device_type,
+                firmware_version=firmware_version,
+                ip_address=ip_address,
+                config=SatelliteConfig(**self._cfg.default_config)
+                if self._cfg.default_config
+                else SatelliteConfig(),
+            )
+            adoption_state = client.adoption_state.value
+        else:
+            # auto_adopt_on_register=False OR factory_reset on an
+            # unknown / pending device id.
+            existing_adopted = self._reg.get_client(device_id)
+            if existing_adopted is not None and not factory_reset:
+                # Already-adopted refresh (config_overrides via /config).
+                existing_adopted.device_type = device_type
+                existing_adopted.firmware_version = firmware_version
+                existing_adopted.ip_address = ip_address
+                existing_adopted.status = existing_adopted.status.__class__.ONLINE
+                existing_adopted.touch()
+                adoption_state = "adopted"
+            else:
+                self._reg.register_pending(
+                    device_id=device_id,
+                    device_type=device_type,
+                    firmware_version=firmware_version,
+                    ip_address=ip_address,
+                )
+                adoption_state = "pending"
+
         self._sink.emit(
-            device_id, LogLevel.INFO, LogSource.SYSTEM, "registered",
-            {"device_type": client.device_type},
+            device_id, LogLevel.INFO, LogSource.SYSTEM,
+            "registered" if adoption_state == "adopted" else "registered_pending",
+            {"device_type": device_type, "adoption_state": adoption_state},
         )
-        self._broadcast({"type": "state_update", "device_id": device_id,
-                         "status": client.status.value})
+        self._broadcast(
+            {
+                "type": "state_update",
+                "device_id": device_id,
+                "adoption_state": adoption_state,
+            }
+        )
         return {
             "session_token": f"st-{device_id}-{int(time.time())}",  # reserved; auth deferred
             "management_server_url": f"http://0.0.0.0:{self._cfg.management_port}",
             "default_config": self._cfg.default_config,
+            "adoption_state": adoption_state,
         }
+
+    # --- adoption (feature 011 US2) -------------------------------------
+    def adopt(
+        self,
+        device_id: str,
+        body: dict[str, Any],
+    ) -> tuple[int, dict[str, Any]]:
+        """Promote a pending device to adopted (R-12, T044).
+
+        Returns ``(status, payload)`` — the HTTP wiring lifts this onto
+        the aiohttp response.
+
+        * 400 — missing/empty ``name``
+        * 404 — no pending device with that id
+        * 409 — ``already_adopted`` or ``device_limit_reached``
+        * 200 — full DeviceState of the now-adopted device
+        """
+        name = (body.get("name") or "").strip()
+        if not name:
+            return 400, {"error": "bad_input", "message": "name is required"}
+        config_overrides = body.get("config_overrides") or {}
+        default_config = (
+            SatelliteConfig(**self._cfg.default_config)
+            if self._cfg.default_config
+            else SatelliteConfig()
+        )
+        if config_overrides:
+            default_config = default_config.merged(config_overrides)
+        try:
+            client = self._reg.adopt(
+                device_id,
+                name=name,
+                default_config=default_config,
+                device_limit=self._cfg.device_limit,
+            )
+        except KeyError:
+            return 404, {"error": "unknown_device", "message": f"no pending device {device_id!r}"}
+        except RuntimeError as e:
+            msg = str(e)
+            if msg.startswith("already_adopted"):
+                return 409, {"error": "already_adopted", "message": msg}
+            if msg.startswith("device_limit_reached"):
+                # Extract current/limit if present.
+                parts = msg.split()
+                cur = lim = None
+                for p in parts:
+                    if p.startswith("current="):
+                        cur = int(p.split("=", 1)[1])
+                    elif p.startswith("limit="):
+                        lim = int(p.split("=", 1)[1])
+                return 409, {
+                    "error": "device_limit_reached",
+                    "message": msg,
+                    "current": cur,
+                    "limit": lim,
+                }
+            return 409, {"error": "internal_error", "message": msg}
+
+        self._sink.emit(
+            device_id, LogLevel.INFO, LogSource.SYSTEM,
+            f"adopted as {name!r}",
+            {"name": name},
+        )
+        self._broadcast(
+            {
+                "type": "state_update",
+                "device_id": device_id,
+                "adoption_state": "adopted",
+                "name": name,
+            }
+        )
+        # Push the now-running config to the device WS subscribers.
+        self._broadcast(
+            {
+                "type": "config_changed",
+                "device_id": device_id,
+                "config": client.config.__dict__,
+                "config_version": client.config_version,
+            }
+        )
+        return 200, self.get_state(device_id)
 
     def heartbeat(self, device_id: str) -> bool:
         return self._reg.heartbeat(device_id) is not None
@@ -107,9 +247,15 @@ class ManagementService:
         sess = self._reg.session_for_device(device_id)
         return {
             "device_id": c.device_id,
+            "name": c.name,
             "device_type": c.device_type,
+            "adoption_state": c.adoption_state.value,
             "status": c.status.value,
             "last_seen": c.last_seen,
+            "firmware_version": c.firmware_version,
+            "ip_address": c.ip_address,
+            "config_version": c.config_version,
+            "ota_state": c.ota_state.value,
             "session": (
                 {
                     "session_id": sess.session_id,
@@ -211,6 +357,10 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
         ok = service.delete(req.match_info["id"])
         return web.Response(status=204 if ok else 404)
 
+    async def _adopt(req):
+        status, payload = service.adopt(req.match_info["id"], await req.json())
+        return web.json_response(payload, status=status)
+
     async def _get_cfg(req):
         c = service.get_config(req.match_info["id"])
         return web.json_response(c) if c else web.Response(status=404)
@@ -311,6 +461,7 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
             web.get("/satellite/list", _list),
             web.get("/satellite/{id}/state", _state),
             web.delete("/satellite/{id}", _delete),
+            web.post("/satellite/{id}/adopt", _adopt),
             web.get("/satellite/{id}/config", _get_cfg),
             web.post("/satellite/{id}/config", _post_cfg),
             web.get("/satellite/{id}/logs", _logs),

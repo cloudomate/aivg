@@ -228,6 +228,62 @@ def cmd_fleet_logs(
     raise typer.Exit(_run(_do()))
 
 
+@app.command("onboard")
+def cmd_onboard(
+    ssid: str = typer.Option(..., "--ssid", help="Wi-Fi SSID for the device."),
+    password: str = typer.Option(
+        "", "--password", help="Wi-Fi password (empty = open network).",
+    ),
+    name: str = typer.Option(
+        ..., "--name",
+        help="Human room name for the device (required under --json/--yes).",
+    ),
+    scan_timeout: float = typer.Option(30.0, "--scan-timeout"),
+    register_timeout: float = typer.Option(90.0, "--register-timeout"),
+) -> None:
+    """Improv-over-BLE provisioning + adopt (US2)."""
+    from .onboard.flow import OnboardError, OnboardProgress, OnboardResult, run_onboard
+
+    async def _do() -> int:
+        try:
+            stream = run_onboard(
+                ssid=ssid,
+                password=password,
+                name=name,
+                gateway_url=G.gateway,
+                scan_timeout=scan_timeout,
+                register_timeout=register_timeout,
+            )
+            async for event in stream:
+                if isinstance(event, OnboardProgress):
+                    if G.json_mode:
+                        from .output import emit_ndjson
+                        emit_ndjson({"phase": event.phase, "detail": event.detail})
+                    else:
+                        from rich.console import Console
+                        Console().print(f"[bold]{event.phase}[/]  {event.detail or ''}")
+                elif isinstance(event, OnboardResult):
+                    if G.json_mode:
+                        emit_ok({
+                            "device_id": event.device_id,
+                            "name": event.name,
+                            "device_state": event.device_state,
+                        })
+                    else:
+                        from rich.console import Console
+                        Console().print(
+                            f"[green]✓[/] adopted [bold]{event.name}[/] "
+                            f"(id {event.device_id})"
+                        )
+                    return OK
+            return OK
+        except OnboardError as e:
+            emit_error(e.code, e.message)
+            return map_error_to_exit_code(e.code)
+
+    raise typer.Exit(_run(_do()))
+
+
 @app.command("watch")
 def cmd_watch(
     device_id: Optional[str] = typer.Option(None, "--device"),

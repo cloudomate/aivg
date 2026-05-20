@@ -22,6 +22,17 @@ class SatelliteAdapterConfig:
     heartbeat_interval: int = 30
     mdns_advertise: bool = True
     default_config: dict[str, Any] = field(default_factory=dict)
+    # Feature 011 (US2 onboarding) ----------------------------------------
+    # auto_adopt_on_register=True keeps pre-v011 behavior: a device that
+    # POSTs /satellite/register lands directly in the adopted registry.
+    # Set to False to require an explicit POST /satellite/{id}/adopt step
+    # before a registered device joins the fleet (constitution v2.0.0
+    # adoption-gated flow used by the Improv-over-BLE onboard path).
+    auto_adopt_on_register: bool = True
+    # Maximum number of adopted devices the gateway will accept; the
+    # /adopt endpoint refuses with 409 device_limit_reached past this. The
+    # pending list is unrestricted (R-12).
+    device_limit: int = 10
 
     @staticmethod
     def from_mapping(data: dict[str, Any] | None) -> "SatelliteAdapterConfig":
@@ -33,6 +44,8 @@ class SatelliteAdapterConfig:
             heartbeat_interval=int(block.get("heartbeat_interval", 30)),
             mdns_advertise=bool(block.get("mdns_advertise", True)),
             default_config=dict(block.get("default_config", {})),
+            auto_adopt_on_register=bool(block.get("auto_adopt_on_register", True)),
+            device_limit=int(block.get("device_limit", 10)),
         )
         cfg.validate()
         return cfg

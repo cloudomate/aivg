@@ -17,8 +17,13 @@ def test_register_returns_contract_fields_and_lists_online(tmp_path):
     res = svc.register(
         {"device_id": "browser-1", "device_type": "browser", "firmware_version": "1.0"}
     )
-    assert set(res) == {"session_token", "management_server_url", "default_config"}
+    # Feature 011 added `adoption_state` to the register response (US2);
+    # the legacy fields are still all present.
+    assert {"session_token", "management_server_url", "default_config"} <= set(res)
     assert res["default_config"] == {"wake_word": "Jarvis"}
+    # Default config has auto_adopt_on_register=True (back-compat), so
+    # the device lands directly in the adopted list.
+    assert res["adoption_state"] == "adopted"
 
     listing = svc.list_clients()
     assert listing[0]["device_id"] == "browser-1"
