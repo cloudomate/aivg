@@ -26,8 +26,11 @@ from typing import Any, AsyncIterator, Optional, Protocol, runtime_checkable
 
 __all__ = [
     "AgentPlatform",
+    "EndpointResult",
+    "AllProvidersUnavailable",
     "PluginRegistry",
     "load_platform",
+    "_validate_agent_platform",
     # Feature 013 — deploy-layer companion to AgentPlatform.
     "SetupCapability",
     "DetectResult",
@@ -41,6 +44,31 @@ __all__ = [
     "PHASE_NAMES",
     "SetupError",
 ]
+
+
+class AllProvidersUnavailable(RuntimeError):
+    """Plugin-neutral base exception: every configured provider (and its
+    fallbacks) failed for this verb. Plugins raise it; the voice loop
+    catches it and emits a perceptible failure (FR-015) rather than a
+    hung session. Lifted from the Hermes plugin to ``platforms/base``
+    in feature 015 so the satellite core can import it without
+    tripping the SC-006 "no .hermes. imports outside the plugin" gate;
+    the bridge re-exports it for backward compat with existing tests."""
+
+
+@dataclass(frozen=True)
+class EndpointResult:
+    """Per-frame endpoint detection signal (feature 015 / R-1).
+
+    Returned by :meth:`AgentPlatform.endpoint`. Carries both
+    ``end_of_utterance`` (the constitutional primary field) and
+    ``speech_started`` (consumed by the voice loop's barge-in watcher to
+    detect the first non-silent frame within the current turn). Frozen
+    so plugins can return literals cheaply.
+    """
+
+    end_of_utterance: bool
+    speech_started: bool = False
 
 
 @runtime_checkable
@@ -79,11 +107,16 @@ class AgentPlatform(Protocol):
     async def synthesize(self, text: str) -> bytes:
         """TTS: text → Opus or PCM (negotiated at startup)."""
 
-    async def endpoint(self, frame: bytes) -> bool:
-        """Server-side end-of-utterance for one incoming PCM frame.
-        Returns ``True`` at the moment EOU is reached. Implementations
-        delegate to the platform's existing silence algorithm
-        (constitution I rule)."""
+    async def endpoint(self, frame: bytes) -> "EndpointResult":
+        """Server-side end-of-utterance + speech-start signal for one
+        incoming PCM frame. Returns :class:`EndpointResult` (frozen
+        dataclass: ``end_of_utterance``, ``speech_started``).
+        Implementations delegate to the platform's existing silence
+        algorithm (constitution I rule).
+
+        Feature 015 / R-1: returning a richer dataclass (vs bare bool)
+        preserves the ``speech_started`` field the voice loop's
+        barge-in watcher consumes."""
 
     async def shutdown(self) -> None:
         """Idempotent teardown."""
@@ -128,6 +161,32 @@ class PluginRegistry:
 def load_platform(name: str) -> AgentPlatform:
     """Convenience shim, identical to :meth:`PluginRegistry.load`."""
     return PluginRegistry.load(name)
+
+
+_REQUIRED_VERBS = ("transcribe", "agent_step", "synthesize", "endpoint")
+
+
+def _validate_agent_platform(plat: AgentPlatform) -> None:
+    """Fail-fast check (feature 015 / R-4 / FR-007): the loaded plugin
+    exposes every required canonical verb as a callable, plus a
+    non-empty lowercase ``name``. Called from
+    :class:`SatelliteWebRTCAdapter` at startup so a misconfigured
+    plugin can never accept a single inbound frame.
+
+    Raises:
+        RuntimeError: with the list of missing verbs and a pointer to
+            ``specs/015-agentplatform-runtime-closure/contracts/agent-platform.md``.
+    """
+    missing = [v for v in _REQUIRED_VERBS if not callable(getattr(plat, v, None))]
+    name = getattr(plat, "name", None)
+    if not isinstance(name, str) or not name or name != name.lower():
+        missing.append("name (non-empty lowercase str)")
+    if missing:
+        raise RuntimeError(
+            f"AgentPlatform {name!r} is missing required verb(s) / attribute(s): "
+            f"{', '.join(missing)}. See "
+            f"specs/015-agentplatform-runtime-closure/contracts/agent-platform.md."
+        )
 
 
 # =============================================================================

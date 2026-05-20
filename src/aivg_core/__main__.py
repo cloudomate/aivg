@@ -15,11 +15,14 @@ import sys
 def _build_dev_adapter():
     from .adapter import SatelliteWebRTCAdapter
 
-    # Import the fake bridge from the test package only in dev mode.
+    # Import the fake platform from the test package only in dev mode.
+    # The ``FakeHermesBridge`` test double satisfies the AgentPlatform
+    # Protocol post-feature-015 (it carries both the bridge-shaped and
+    # platform-shaped verbs) so it drops in here as the active platform.
     sys.path.insert(0, "tests")
     from fakes import FakeHermesBridge  # type: ignore
 
-    return SatelliteWebRTCAdapter(bridge=FakeHermesBridge())
+    return SatelliteWebRTCAdapter(platform=FakeHermesBridge())
 
 
 async def _amain(args: argparse.Namespace) -> int:

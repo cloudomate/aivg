@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable, Optional
 
-from ..platforms.hermes.bridge import HermesBridge  # AgentPlatform-coupling-TODO
+from ..platforms.base import AgentPlatform
 from ..logsink import LogSink
 from ..models import LogLevel, LogSource
 from ..registry import Registry
@@ -28,13 +28,16 @@ class SignalingService:
     def __init__(
         self,
         registry: Registry,
-        bridge: HermesBridge,
+        platform: AgentPlatform,
         sink: LogSink,
         transport_factory: TransportFactory,
         ui_broadcast=None,
     ) -> None:
         self._reg = registry
-        self._bridge = bridge
+        # Feature 015 / FR-003: the signaling service holds the active
+        # AgentPlatform and threads it through to each per-call Session.
+        # No platform-specific symbol crosses this boundary.
+        self._platform = platform
         self._sink = sink
         self._make_transport = transport_factory
         # Optional fan-out for call-scoped UI events (state / partial
@@ -64,7 +67,7 @@ class SignalingService:
                 except Exception:  # noqa: BLE001 - UI fan-out must never break voice
                     pass
         session = Session(
-            sess_model, transport, self._bridge, self._sink, ui_sink=ui_sink
+            sess_model, transport, self._platform, self._sink, ui_sink=ui_sink
         )
         self._tasks[sess_model.session_id] = asyncio.create_task(self._run(session))
         self._sink.emit(

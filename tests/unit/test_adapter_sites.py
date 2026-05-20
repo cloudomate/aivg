@@ -67,7 +67,10 @@ def _make_adapter(cfg):
     async def _tf(sdp, device_id):  # unused during start()
         raise NotImplementedError
 
-    return SatelliteWebRTCAdapter(bridge=FakeHermesBridge(), cfg=cfg, transport_factory=_tf)
+    # Feature 015: SatelliteWebRTCAdapter takes a platform (the
+    # AgentPlatform Protocol) instead of a Hermes-bridge. FakeHermesBridge
+    # dual-implements both surfaces.
+    return SatelliteWebRTCAdapter(platform=FakeHermesBridge(), cfg=cfg, transport_factory=_tf)
 
 
 async def test_build_signaling_app_exposes_webrtc_routes():
