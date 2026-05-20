@@ -5,6 +5,33 @@ All notable changes to `@aivg/sat-sdk` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-05-20
+
+### Fixed
+
+- **Protocol drift caught in live electron-test:** the gateway sends
+  WS messages of types `registered` (reply to outbound register) and
+  `state_update` (adoption-state broadcast to every connected client),
+  not the `adoption` shape the SDK 0.1.0 expected. 0.1.0 surfaced both
+  as `transient_error(signaling_retry: unknown WS message type)`
+  warnings in the console.
+- `parseWsInbound()` now treats both `registered` and `state_update`
+  as known top-level types and routes them to the existing `adoption`
+  event with the gateway's `adoption_state` field.
+- `state_update` is broadcast to ALL connected WS clients; the SDK
+  now filters by `device_id` and only acts on messages addressed to
+  its own device. Avoids spurious `adoption` events when other devices
+  in the fleet change state.
+- `config_changed` was also broadcast-to-all on the gateway side and
+  carried `config_version` as a sibling field (not inside `config`).
+  The SDK now filters by `device_id` AND flattens the version field
+  into the public `SatelliteConfig.version` shape.
+
+### Internal
+
+- Wire fixtures + contract tests updated to match the real gateway shapes.
+- Test totals: 147 passing (up from 146).
+
 ## [0.1.0] — 2026-05-20
 
 Initial release. Feature 014 of the AIVG monorepo.

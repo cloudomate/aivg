@@ -1,6 +1,6 @@
 { "comment": "SC-003 binding fixture: registration → drop → reconnect → restored. The test drives the WS open + close + open sequence externally; this file just lists the inbound messages the gateway sends on each open.", "captured_against": "gateway contract 1.0.0" }
-{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "adoption", "state": "adopted" } }
+{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "registered", "adoption_state": "adopted" } }
 { "ts": 2.0, "dir": "in", "kind": "ws_text", "body": { "type": "config_changed", "config": { "wake_word": "Hey Jarvis", "routing_mode": "preferred", "log_level": "INFO", "heartbeat_interval": 30, "extra": {}, "version": 2 } } }
 { "ts": 10.0, "dir": "out", "kind": "ws_close" }
-{ "ts": 15.0, "dir": "in", "kind": "ws_text", "body": { "type": "adoption", "state": "adopted" } }
+{ "ts": 15.0, "dir": "in", "kind": "ws_text", "body": { "type": "registered", "adoption_state": "adopted" } }
 { "ts": 16.0, "dir": "in", "kind": "ws_text", "body": { "type": "log_entry", "entry": { "ts": "2026-05-20T15:00:16Z", "level": "INFO", "source": "gateway", "message": "satellite_webrtc reconnected" } } }

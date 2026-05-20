@@ -1,5 +1,5 @@
 { "comment": "Forward-compat smoke (R-8): unknown agent_event kind + unknown top-level type. SDK MUST emit exactly one transient_error per kind per session.", "captured_against": "gateway contract 1.0.0" }
-{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "adoption", "state": "adopted" } }
+{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "registered", "adoption_state": "adopted" } }
 { "ts": 2.0, "dir": "in", "kind": "ws_text", "body": { "type": "future_event_kind", "data": "unknown top-level type" } }
 { "ts": 3.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "future_agent_event", "session_id": "s-1", "seq": 1, "ts": 3.0, "payload": { "data": "unknown agent_event kind" } } }
 { "ts": 4.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "future_agent_event", "session_id": "s-1", "seq": 2, "ts": 4.0, "payload": { "data": "second of the same kind — should be silenced" } } }

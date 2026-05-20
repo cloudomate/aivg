@@ -14,11 +14,22 @@ describe("contract version", () => {
 });
 
 describe("parseWsInbound — forward-compat (R-8)", () => {
-  it("parses a known adoption message", () => {
-    const msg = parseWsInbound('{"type":"adoption","state":"pending"}');
-    expect(msg.type).toBe("adoption");
-    if (msg.type === "adoption") {
-      expect(msg.state).toBe("pending");
+  it("parses a known `registered` message (gateway's reply to register)", () => {
+    const msg = parseWsInbound('{"type":"registered","adoption_state":"pending"}');
+    expect(msg.type).toBe("registered");
+    if (msg.type === "registered") {
+      expect(msg.adoption_state).toBe("pending");
+    }
+  });
+
+  it("parses a known `state_update` broadcast", () => {
+    const msg = parseWsInbound(
+      '{"type":"state_update","device_id":"d1","adoption_state":"adopted"}',
+    );
+    expect(msg.type).toBe("state_update");
+    if (msg.type === "state_update") {
+      expect(msg.device_id).toBe("d1");
+      expect(msg.adoption_state).toBe("adopted");
     }
   });
 
@@ -61,7 +72,8 @@ describe("parseWsInbound — forward-compat (R-8)", () => {
     // below wouldn't narrow correctly. Runtime smoke just ensures the
     // discriminant strings match the wire spec.
     const types: WsInboundMessage["type"][] = [
-      "adoption",
+      "registered",
+      "state_update",
       "config_changed",
       "command",
       "log_entry",

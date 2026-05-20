@@ -142,7 +142,7 @@ describe("ControlPlane — connect + register + heartbeat", () => {
     void cp.start();
     const ws = FakeWS.instances[0]!;
     ws.triggerOpen();
-    ws.triggerMessage(JSON.stringify({ type: "adoption", state: "adopted" }));
+    ws.triggerMessage(JSON.stringify({ type: "registered", adoption_state: "adopted" }));
     const adoption = events.find((e) => e.name === "adoption");
     expect(adoption).toBeDefined();
     expect((adoption?.payload as { state: string }).state).toBe("adopted");

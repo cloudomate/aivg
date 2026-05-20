@@ -321,17 +321,36 @@ export class ControlPlane {
   private handleMessage(raw: string): void {
     const msg = parseWsInbound(raw);
     switch (msg.type) {
-      case "adoption":
-        // The full adoption state-machine + firstApproval semantics
-        // land in US2 (T040). Phase 3 just surfaces the raw state.
-        this.opts.bus.emit("adoption", { state: msg.state, firstApproval: false });
+      case "registered":
+        // Gateway's reply to our outbound `register` message. The
+        // `adoption_state` field is the FIRST adoption signal we see;
+        // surface it as an `adoption` bus event so US2's
+        // AdoptionTracker can decorate with firstApproval semantics.
+        this.opts.bus.emit("adoption", {
+          state: msg.adoption_state,
+          firstApproval: false, // AdoptionTracker re-emits with the right flag
+        });
+        return;
+      case "state_update":
+        // Broadcast to EVERY connected WS — filter to our own device_id.
+        // Other devices' state changes are not our consumer's concern.
+        if (msg.device_id !== this.opts.deviceId) return;
+        this.opts.bus.emit("adoption", {
+          state: msg.adoption_state,
+          firstApproval: false,
+        });
         return;
       // The rest of the message types are handled by US2/US3-side
       // modules that subscribe to the bus directly. The control plane
       // is concerned with the WS *transport*, not the message *meaning*.
       // We still need to surface them so subscribers can react:
       case "config_changed":
-        // Map snake_case wire → camelCase SDK shape (full mapping in US2).
+        // Broadcast to all WS subscribers — filter to our device_id.
+        if (msg.device_id !== this.opts.deviceId) return;
+        // Map snake_case wire → camelCase SDK shape. The gateway sends
+        // `config_version` as a SIBLING (not inside config) — flatten
+        // here so the public SatelliteConfig keeps the `version` field
+        // it has always had.
         this.opts.bus.emit("config_changed", {
           wakeWord: msg.config.wake_word,
           routingMode: msg.config.routing_mode,
@@ -341,8 +360,8 @@ export class ControlPlane {
             | "warn"
             | "error",
           heartbeatInterval: msg.config.heartbeat_interval,
-          extra: msg.config.extra,
-          version: msg.config.version,
+          extra: msg.config.extra ?? {},
+          version: msg.config_version ?? msg.config.version ?? 0,
         });
         return;
       case "command":

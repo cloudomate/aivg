@@ -51,9 +51,32 @@ export type WsOutboundMessage =
 
 export type AdoptionWireState = "pending" | "adopted";
 
-export interface WsAdoptionMessage {
-  type: "adoption";
-  state: AdoptionWireState;
+/**
+ * Gateway's reply to our outbound `register` message.
+ *
+ * The gateway echoes this with the registration result + adoption
+ * state. The SDK treats it as the FIRST `adoption`-state signal —
+ * even before any `state_update` broadcast arrives.
+ */
+export interface WsRegisteredMessage {
+  type: "registered";
+  /** "pending" until an operator runs `aivg device adopt`. */
+  adoption_state: AdoptionWireState;
+  session_token?: string;
+  management_server_url?: string;
+  default_config?: Record<string, unknown>;
+}
+
+/**
+ * Per-device adoption / status broadcast. The gateway emits this on
+ * EVERY connected WS, not just the one this device owns — so the
+ * SDK filters by `device_id` and only acts when it matches.
+ */
+export interface WsStateUpdateMessage {
+  type: "state_update";
+  device_id: string;
+  adoption_state: AdoptionWireState;
+  name?: string;
 }
 
 /**
@@ -72,7 +95,14 @@ export interface SatelliteConfigWire {
 
 export interface WsConfigChangedMessage {
   type: "config_changed";
+  /**
+   * Gateway broadcasts to every connected WS — SDK filters to its own
+   * device_id before surfacing.
+   */
+  device_id: string;
   config: SatelliteConfigWire;
+  /** Monotonic version. Sibling field on the wire (NOT inside `config`). */
+  config_version?: number;
 }
 
 export interface WsCommandMessage {
@@ -141,7 +171,8 @@ export interface WsUnknownMessage {
 }
 
 export type WsInboundMessage =
-  | WsAdoptionMessage
+  | WsRegisteredMessage
+  | WsStateUpdateMessage
   | WsConfigChangedMessage
   | WsCommandMessage
   | WsLogEntryMessage
@@ -174,7 +205,8 @@ export function parseWsInbound(raw: string): WsInboundMessage {
     return { type: "__non_string_type__", _unknown: parsed as Record<string, unknown> };
   }
   const known = new Set<string>([
-    "adoption",
+    "registered",
+    "state_update",
     "config_changed",
     "command",
     "log_entry",

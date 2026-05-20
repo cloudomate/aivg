@@ -127,7 +127,7 @@ describe("event-surface contract", () => {
       const { bus, ws, cp } = buildCp();
       let fired = false;
       bus.on("adoption", () => (fired = true));
-      ws().msg(JSON.stringify({ type: "adoption", state: "adopted" }));
+      ws().msg(JSON.stringify({ type: "registered", adoption_state: "adopted" }));
       expect(fired).toBe(true);
       cp.stop();
     });
@@ -136,17 +136,21 @@ describe("event-surface contract", () => {
       const { bus, ws, cp } = buildCp();
       let fired = false;
       bus.on("config_changed", () => (fired = true));
+      // The control plane filters config_changed by device_id; the test
+      // CP is constructed with deviceId "evt-test", so the broadcast
+      // MUST carry that device_id for the event to fire.
       ws().msg(
         JSON.stringify({
           type: "config_changed",
+          device_id: "evt-test",
           config: {
             wake_word: "x",
             routing_mode: "preferred",
             log_level: "INFO",
             heartbeat_interval: 30,
             extra: {},
-            version: 1,
           },
+          config_version: 1,
         }),
       );
       expect(fired).toBe(true);

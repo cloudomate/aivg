@@ -1,7 +1,7 @@
 { "comment": "Happy-path fixture: register → adopt → config → voice turn → clean disconnect. Hand-crafted; mirrors contracts/wire-protocol.md shapes.", "captured_against": "gateway contract 1.0.0" }
-{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "adoption", "state": "pending" } }
-{ "ts": 2.0, "dir": "in", "kind": "ws_text", "body": { "type": "adoption", "state": "adopted" } }
-{ "ts": 3.0, "dir": "in", "kind": "ws_text", "body": { "type": "config_changed", "config": { "wake_word": "Hey Jarvis", "routing_mode": "preferred", "log_level": "INFO", "heartbeat_interval": 30, "extra": {}, "version": 1 } } }
+{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "registered", "adoption_state": "pending" } }
+{ "ts": 2.0, "dir": "in", "kind": "ws_text", "body": { "type": "registered", "adoption_state": "adopted" } }
+{ "ts": 3.0, "dir": "in", "kind": "ws_text", "body": { "type": "config_changed", "device_id": "wire-test", "config": { "wake_word": "Hey Jarvis", "routing_mode": "preferred", "log_level": "INFO", "heartbeat_interval": 30, "extra": {}, "version": 1 } } }
 { "ts": 4.0, "dir": "in", "kind": "ws_text", "body": { "type": "log_entry", "entry": { "ts": "2026-05-20T15:00:00Z", "level": "INFO", "source": "gateway", "message": "satellite_webrtc connected" } } }
 { "ts": 5.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "transcript_delta", "session_id": "s-1", "seq": 1, "ts": 5.0, "payload": { "speaker": "user", "text": "what's the weather", "final": true } } }
 { "ts": 6.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "transcript_delta", "session_id": "s-1", "seq": 2, "ts": 6.0, "payload": { "speaker": "assistant", "text": "Sunny and warm.", "final": true } } }
