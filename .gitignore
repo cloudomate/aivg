@@ -22,6 +22,12 @@ Thumbs.db
 
 # Node / Electron client
 node_modules/
+
+# @aivg/sat-sdk (feature 014) build artefacts + per-pkg deps
+sdks/typescript/dist/
+sdks/typescript/coverage/
+sdks/typescript/.tsbuildinfo
+
 # deploy run-state
 deploy/.state/
 

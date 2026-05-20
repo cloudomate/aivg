@@ -1,0 +1,69 @@
+{
+  "name": "@aivg/sat-sdk",
+  "version": "0.0.0",
+  "description": "AIVG satellite-side SDK — register, voice (WebRTC), config, agent telemetry, and OTA hooks against an AIVG gateway. Browser + Electron + Node. No native deps.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint --max-warnings=0 src tests examples",
+    "format": "prettier --write src tests examples",
+    "format:check": "prettier --check src tests examples",
+    "typecheck": "tsc --noEmit",
+    "check-size": "node scripts/check-size.mjs",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run build && npm run check-size && npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "aivg",
+    "voice",
+    "satellite",
+    "webrtc",
+    "hermes",
+    "sdk"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "eslint": "^8.57.0",
+    "gzip-size": "^7.0.0",
+    "happy-dom": "^14.12.0",
+    "prettier": "^3.3.0",
+    "ts-morph": "^22.0.0",
+    "tsup": "^8.1.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
