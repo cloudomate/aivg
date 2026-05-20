@@ -9,13 +9,13 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncIterator, Optional
 
-from hermes_satellite_adapter.hermes_bridge import (
+from satellite_core.platforms.hermes.bridge import (
     AgentReply,
     AllProvidersUnavailable,
     EndpointSignal,
     SessionCtx,
 )
-from hermes_satellite_adapter.session import MediaTransport
+from satellite_core.webrtc.session import MediaTransport
 
 EOU = b"<EOU>"
 SPEECH = b"<SPEECH>"

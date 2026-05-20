@@ -1,0 +1,547 @@
+openapi: 3.1.0
+info:
+  title: Hermes Satellite Management API
+  version: 1.0.0
+  description: |
+    Operator REST surface for the satellite fleet (design Appendix A).
+    Platform-agnostic per constitution v2.0.0 Principle IV: the active
+    agent platform plugin (v1: Hermes; planned: OpenClaw) is selected
+    server-side and is invisible to this contract.
+    Consumed by the platform-neutral `sat-cli` CLI, by per-platform agent
+    skills (via the CLI), and by the optional web UI. The gateway↔device
+    always-on control channel (`WS /satellite/ws`) is NOT documented here
+    — see `management-ws.md`.
+  contact:
+    name: Hermes Voice
+servers:
+  - url: http://{host}:{port}
+    variables:
+      host: { default: localhost }
+      port: { default: "8643" }
+
+tags:
+  - name: registry
+  - name: adoption
+  - name: config
+  - name: command
+  - name: logs
+  - name: ota
+
+paths:
+  /satellite/register:
+    post:
+      tags: [registry]
+      summary: Device-driven registration. Devices call this on boot.
+      description: |
+        Operator surfaces SHOULD NOT call this directly; the CLI's `onboard`
+        flow drives Improv-over-BLE locally and the device itself calls
+        `/satellite/register` once it joins WiFi. Re-registers of an adopted
+        device update `last_seen`; a register with `factory_reset=true`
+        demotes the device back to pending (R-7).
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '200':
+          description: Registered (pending or refreshed adopted).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegisterResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /satellite/list:
+    get:
+      tags: [registry]
+      summary: List all known devices (adopted + pending).
+      operationId: listDevices
+      parameters:
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [all, adopted, pending]
+            default: all
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DeviceSummary' }
+
+  /satellite/{id}/state:
+    get:
+      tags: [registry]
+      summary: Full device state snapshot.
+      operationId: getDeviceState
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceState' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /satellite/{id}/adopt:
+    post:
+      tags: [adoption]
+      summary: Claim a pending device (assign a name; apply default config).
+      description: |
+        Promotes a `PendingDevice` to `ConnectedClient`. Returns 409 if the
+        device_limit would be exceeded (R-12); returns 404 if no pending
+        device with that id exists; returns 409 if the device is already
+        adopted (use POST /config to rename or reconfigure).
+      operationId: adoptDevice
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdoptRequest' }
+      responses:
+        '200':
+          description: Adopted; effective config returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceState' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: device_limit_reached OR already_adopted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictError' }
+
+  /satellite/{id}:
+    delete:
+      tags: [registry]
+      summary: Remove a device from the fleet (unpair).
+      description: |
+        Destructive — clients MUST confirm before invoking (FR-019). Removes
+        the device from the adopted registry; the device may re-register as
+        pending afterward.
+      operationId: deleteDevice
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '204': { description: removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /satellite/{id}/config:
+    get:
+      tags: [config]
+      summary: Get a device's running configuration.
+      operationId: getDeviceConfig
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceConfig' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [config]
+      summary: Update a device's configuration.
+      description: |
+        Optimistic concurrency: send `If-Match: <config_version>` to fail-fast
+        on stale base (R-11); omit to take last-writer-wins. Returns the new
+        config (with bumped `config_version`).
+      operationId: postDeviceConfig
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: header, name: If-Match, schema: { type: string }, required: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceConfigPatch' }
+      responses:
+        '200':
+          description: applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceConfig' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: stale If-Match version }
+        '503':
+          description: device offline — change refused (queueing is opt-in via ?queue=true)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictError' }
+
+  /satellite/{id}/config/schema:
+    get:
+      tags: [config]
+      summary: Device-provided config schema (drives CLI/skill/UI editable fields).
+      operationId: getDeviceConfigSchema
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: JSON Schema (Draft-2020-12) describing editable fields.
+          content:
+            application/json: { schema: { type: object } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /satellite/{id}/command:
+    post:
+      tags: [command]
+      summary: Send a command to a device.
+      description: |
+        Closed enum (R-14). Destructive verbs (`factory_reset`) require the
+        CLI/skill to confirm before calling — the server does not prompt.
+      operationId: postDeviceCommand
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommandRequest' }
+      responses:
+        '202':
+          description: accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommandResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { description: device offline }
+
+  /satellite/{id}/logs:
+    get:
+      tags: [logs]
+      summary: Tail a device's logs (one-shot or live SSE).
+      description: |
+        Without `follow`: returns an array of recent LogEntry records.
+        With `follow=true`: responds `text/event-stream`, one `data:` line
+        per `LogEntry` JSON object. Reconnect via standard SSE `Last-Event-
+        Id`. OTA progress arrives on the same stream with `source="ota"`
+        (R-3, R-6).
+      operationId: getDeviceLogs
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: query, name: since, schema: { type: number, format: float } }
+        - { in: query, name: level, schema: { type: string, enum: [DEBUG, INFO, WARN, ERROR] } }
+        - { in: query, name: source, schema: { type: string, enum: [vad, wakeword, asr, tts, webrtc, system, ota] } }
+        - { in: query, name: follow, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: snapshot OR live SSE
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LogEntry' }
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/LogEntry' }
+
+  /satellite/logs:
+    get:
+      tags: [logs]
+      summary: Aggregate fleet log (filterable; supports follow as above).
+      operationId: getFleetLogs
+      parameters:
+        - { in: query, name: device_id, schema: { type: string } }
+        - { in: query, name: since, schema: { type: number, format: float } }
+        - { in: query, name: level, schema: { type: string, enum: [DEBUG, INFO, WARN, ERROR] } }
+        - { in: query, name: source, schema: { type: string, enum: [vad, wakeword, asr, tts, webrtc, system, ota] } }
+        - { in: query, name: follow, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: snapshot OR live SSE (see `/satellite/{id}/logs`)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LogEntry' }
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/LogEntry' }
+
+  /satellite/{id}/ota/check:
+    post:
+      tags: [ota]
+      summary: Check whether an update is available for this device.
+      operationId: otaCheck
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtaCheckResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: browser device — OTA not applicable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConflictError' }
+        '503': { description: device offline }
+
+  /satellite/{id}/ota/apply:
+    post:
+      tags: [ota]
+      summary: Apply an available update; returns the job id.
+      operationId: otaApply
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string }
+                url: { type: string, format: uri, description: "Override; default = manifest url." }
+      responses:
+        '202':
+          description: applying
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtaJob' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: browser — not OTA-eligible, or already in progress }
+        '503': { description: device offline }
+
+  /satellite/{id}/ota/status:
+    post:
+      tags: [ota]
+      summary: Device-side report of OTA progress / result.
+      description: Called by the device, not by operator surfaces.
+      operationId: otaStatusReport
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OtaStatusReport' }
+      responses:
+        '204': { description: recorded }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /satellite/{id}/ota/manifest:
+    get:
+      tags: [ota]
+      summary: Manifest for this device's type (version, url, sha256, changelog).
+      operationId: getOtaManifest
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtaManifest' }
+        '404':
+          description: no manifest for this device_type (or device unknown)
+
+components:
+  schemas:
+    DeviceType:
+      type: string
+      enum: [rpi, esp32, browser]
+
+    AdoptionState:
+      type: string
+      enum: [pending, adopted]
+
+    RegisterRequest:
+      type: object
+      required: [device_id, device_type]
+      properties:
+        device_id: { type: string }
+        device_type: { $ref: '#/components/schemas/DeviceType' }
+        firmware_version: { type: string }
+        ip_address: { type: string }
+        capabilities: { type: object, additionalProperties: true }
+        factory_reset:
+          type: boolean
+          default: false
+          description: "Set by the device after wiping local state; demotes adopted→pending."
+
+    RegisterResponse:
+      type: object
+      required: [device_id, session_token, management_server_url]
+      properties:
+        device_id: { type: string }
+        session_token: { type: string }
+        management_server_url: { type: string }
+        adoption_state: { $ref: '#/components/schemas/AdoptionState' }
+        default_config: { $ref: '#/components/schemas/DeviceConfig' }
+
+    DeviceSummary:
+      type: object
+      required: [device_id, device_type, adoption_state, status]
+      properties:
+        device_id: { type: string }
+        name: { type: string, nullable: true }
+        device_type: { $ref: '#/components/schemas/DeviceType' }
+        adoption_state: { $ref: '#/components/schemas/AdoptionState' }
+        status: { type: string, enum: [online, offline, connecting, error] }
+        last_seen: { type: number, format: float }
+        firmware_version: { type: string }
+        ota_state: { type: string, enum: [idle, checking, downloading, flashing, rebooting, failed, rolled_back] }
+
+    DeviceState:
+      allOf:
+        - $ref: '#/components/schemas/DeviceSummary'
+        - type: object
+          properties:
+            ip_address: { type: string }
+            connection_type: { type: string, enum: [websocket, webrtc, http_poll] }
+            echo_strategy: { type: string, enum: [hardware_xmos, software_speex, half_duplex, browser_aec3] }
+            config: { $ref: '#/components/schemas/DeviceConfig' }
+            session: { $ref: '#/components/schemas/SessionInfo', nullable: true }
+            error_count: { type: integer }
+            last_error: { type: string, nullable: true }
+
+    SessionInfo:
+      type: object
+      properties:
+        state: { type: string, enum: [idle, listening, thinking, speaking, error] }
+        webrtc_state: { type: string }
+        bitrate_tx: { type: integer }
+        bitrate_rx: { type: integer }
+        latency_ms: { type: number, format: float }
+        packet_loss_pct: { type: number, format: float }
+
+    DeviceConfig:
+      type: object
+      required: [config_version]
+      properties:
+        config_version: { type: integer, minimum: 0, description: "Monotonic; bump on every write." }
+        config_updated_at: { type: number, format: float }
+        wake_word: { type: string }
+        wake_word_engine: { type: string, enum: [porcupine, openwakeword, xmos_vad] }
+        vad_threshold: { type: number, format: float, minimum: 0.0, maximum: 1.0 }
+        vad_mode: { type: string, enum: [adaptive, fixed] }
+        routing_mode: { type: string, enum: [preferred, full_local, bypass] }
+        input_volume: { type: number, format: float }
+        output_volume: { type: number, format: float }
+        echo_strategy: { type: string, enum: [hardware_xmos, software_speex, half_duplex, browser_aec3] }
+        webrtc_enabled: { type: boolean }
+        log_level: { type: string, enum: [DEBUG, INFO, WARN, ERROR] }
+        heartbeat_interval: { type: integer, minimum: 5 }
+
+    DeviceConfigPatch:
+      type: object
+      description: "Partial config; only set fields are changed. config_version is ignored on input — server bumps it."
+      additionalProperties: true
+
+    AdoptRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, description: "Operator-supplied room name." }
+        config_overrides: { $ref: '#/components/schemas/DeviceConfigPatch' }
+
+    CommandVerb:
+      type: string
+      enum: [reboot, restart_voice, restart_manager, reset_config, factory_reset, mute, unmute, identify]
+
+    CommandRequest:
+      type: object
+      required: [command]
+      properties:
+        command: { $ref: '#/components/schemas/CommandVerb' }
+        args: { type: object, additionalProperties: true }
+
+    CommandResponse:
+      type: object
+      required: [accepted, scheduled_at]
+      properties:
+        accepted: { type: boolean }
+        scheduled_at: { type: number, format: float }
+        reason: { type: string }
+
+    LogEntry:
+      type: object
+      required: [device_id, timestamp, level, source, message]
+      properties:
+        device_id: { type: string }
+        timestamp: { type: number, format: float }
+        level: { type: string, enum: [DEBUG, INFO, WARN, ERROR] }
+        source: { type: string, enum: [vad, wakeword, asr, tts, webrtc, system, ota] }
+        message: { type: string }
+        metadata: { type: object, additionalProperties: true }
+
+    OtaCheckResult:
+      type: object
+      required: [update_available]
+      properties:
+        update_available: { type: boolean }
+        current_version: { type: string }
+        latest_version: { type: string, nullable: true }
+        changelog_url: { type: string, format: uri, nullable: true }
+
+    OtaJob:
+      type: object
+      required: [job_id, device_id, target_version, state, started_at]
+      properties:
+        job_id: { type: string }
+        device_id: { type: string }
+        target_version: { type: string }
+        state: { type: string, enum: [idle, checking, downloading, flashing, rebooting, failed, rolled_back] }
+        started_at: { type: number, format: float }
+        ended_at: { type: number, format: float, nullable: true }
+        result: { type: string, enum: [success, rolled_back, failed], nullable: true }
+        failure_reason: { type: string, nullable: true }
+
+    OtaStatusReport:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, enum: [downloading, flashing, rebooting, failed, rolled_back, idle] }
+        version: { type: string }
+        result: { type: string, enum: [success, rolled_back, failed], nullable: true }
+        failure_reason: { type: string, nullable: true }
+
+    OtaManifest:
+      type: object
+      required: [device_type, version, url, sha256]
+      properties:
+        device_type:
+          type: string
+          enum: [rpi, esp32]
+          description: "Browser is explicitly excluded — see constitution II divergence list."
+        version: { type: string }
+        url: { type: string, format: uri }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        signature: { type: string, nullable: true }
+        changelog: { type: string }
+
+    ConflictError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [device_limit_reached, already_adopted, browser_not_ota_eligible, ota_in_progress, device_offline]
+        message: { type: string }
+        current: { type: integer, nullable: true }
+        limit: { type: integer, nullable: true }
+
+  responses:
+    BadRequest:
+      description: malformed request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              message: { type: string }
+    NotFound:
+      description: unknown device

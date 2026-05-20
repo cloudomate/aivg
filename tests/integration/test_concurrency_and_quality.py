@@ -9,12 +9,12 @@ import time
 
 import pytest
 
-from hermes_satellite_adapter.config import SatelliteAdapterConfig
-from hermes_satellite_adapter.logsink import LogSink
-from hermes_satellite_adapter.management import ManagementService
-from hermes_satellite_adapter.models import VoiceSession
-from hermes_satellite_adapter.registry import Registry
-from hermes_satellite_adapter.session import Session
+from satellite_core.config import SatelliteAdapterConfig
+from satellite_core.logsink import LogSink
+from satellite_core.management import ManagementService
+from satellite_core.models import VoiceSession
+from satellite_core.registry import Registry
+from satellite_core.webrtc.session import Session
 
 pytestmark = pytest.mark.asyncio
 
@@ -70,7 +70,7 @@ async def test_sc002_no_dropped_turns_over_a_multi_turn_session(tmp_path):
 async def test_sc004_adapter_path_matches_direct_bridge_output(tmp_path):
     """No measurable quality regression vs calling the bridge directly."""
     from fakes import FakeHermesBridge, FakeTransport
-    from hermes_satellite_adapter.hermes_bridge import SessionCtx
+    from satellite_core.platforms.hermes.bridge import SessionCtx
 
     b = FakeHermesBridge()
     ctx = SessionCtx(device_id="d", session_id="s")

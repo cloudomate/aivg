@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Optional
 
 from .config import SatelliteAdapterConfig, load_adapter_config
-from .hermes_bridge import HermesBridge, UnboundHermesBridge
 from .logsink import LogSink
-from .management import ManagementService, build_management_app
+from .management.service import ManagementService, build_management_app
+from .platforms.hermes.bridge import HermesBridge, UnboundHermesBridge  # AgentPlatform-coupling-TODO
 from .registry import Registry
-from .signaling import SignalingService, aiortc_transport_factory
+from .webrtc.signaling import SignalingService, aiortc_transport_factory
 
 
 class SatelliteWebRTCAdapter:
@@ -53,7 +53,7 @@ class SatelliteWebRTCAdapter:
             return
         from aiohttp import web  # noqa: WPS433
 
-        from .signaling import build_signaling_app
+        from .webrtc.signaling import build_signaling_app
 
         # 1) Control plane (always-on) on management_port.
         mgmt_runner = web.AppRunner(build_management_app(self.management))
@@ -124,7 +124,7 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
     )
     from gateway.session import SessionSource  # type: ignore
 
-    from .hermes_bridge import HermesV013Bridge, SessionCtx
+    from .platforms.hermes.bridge import HermesV013Bridge, SessionCtx  # AgentPlatform-coupling-TODO
 
     class _SatellitePlatformAdapter(BasePlatformAdapter):
         def __init__(self, config) -> None:

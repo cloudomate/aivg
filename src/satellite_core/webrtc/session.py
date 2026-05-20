@@ -20,15 +20,15 @@ import time
 import uuid
 from typing import Optional, Protocol
 
-from .hermes_bridge import (
+from ..platforms.hermes.bridge import (  # AgentPlatform-coupling-TODO
     AgentReply,
     AllProvidersUnavailable,
     HermesBridge,
     SessionCtx,
 )
-from .logsink import LogSink
-from .turnlatency import build_breakdown
-from .models import (
+from ..logsink import LogSink
+from ..turnlatency import build_breakdown
+from ..models import (
     ConversationTurn,
     LogLevel,
     LogSource,
@@ -55,7 +55,7 @@ def _latency_log_mode() -> str:
     if _LAT_MODE_CACHE is None:
         mode = "summary"
         try:
-            from .config import load_adapter_config
+            from ..config import load_adapter_config
 
             dc = load_adapter_config().default_config or {}
             m = str(dc.get("latency_log", "summary")).strip().lower()

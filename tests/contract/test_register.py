@@ -1,9 +1,9 @@
 """Contract: POST /satellite/register + lifecycle (contracts/management-api.md)."""
 
-from hermes_satellite_adapter.config import SatelliteAdapterConfig
-from hermes_satellite_adapter.logsink import LogSink
-from hermes_satellite_adapter.management import ManagementService
-from hermes_satellite_adapter.registry import Registry
+from satellite_core.config import SatelliteAdapterConfig
+from satellite_core.logsink import LogSink
+from satellite_core.management import ManagementService
+from satellite_core.registry import Registry
 
 
 def _svc(tmp_path):

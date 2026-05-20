@@ -8,8 +8,8 @@ Contracts A1–A5 (specs/007-live-agent-streaming/contracts/
 streaming-conversation.md).
 """
 
-from hermes_satellite_adapter.streamasm import IncrementalUnitAssembler
-from hermes_satellite_adapter.textseg import iter_sentences
+from satellite_core.webrtc.streamasm import IncrementalUnitAssembler
+from satellite_core.webrtc.textseg import iter_sentences
 
 
 def _drip_cumulative(text: str):

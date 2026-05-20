@@ -3,26 +3,45 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hermes-satellite-adapter"
-version = "0.1.0"
-description = "Hermes gateway platform adapter for realtime voice (STT/agent/TTS) over WebRTC"
+name = "satellite-core"
+version = "0.2.0"
+description = "Platform-agnostic voice-satellite management plane + CLI; Hermes is the v1 plugin (feature 011, constitution v2.0.0)"
 requires-python = ">=3.11"
 dependencies = [
     "aiortc>=1.6",
     "aiohttp>=3.9",
+    "aiohttp-sse>=2.2",
     "av>=11",
+    "httpx>=0.27",
+    "typer>=0.12",
+    "rich>=13",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.4", "black>=24"]
+ble = ["bleak>=0.22"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "black>=24",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+sat-cli = "sat_cli.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["satellite_core*", "sat_cli*", "hermes_satellite_adapter*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # Silence the satellite_core compat-shim DeprecationWarning during tests.
+    "ignore:hermes_satellite_adapter is renamed:DeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 100

@@ -8,10 +8,10 @@ injected transport factory.
 
 import pytest
 
-from hermes_satellite_adapter.config import SatelliteAdapterConfig
-from hermes_satellite_adapter.logsink import LogSink
-from hermes_satellite_adapter.registry import Registry
-from hermes_satellite_adapter.signaling import SignalingService
+from satellite_core.config import SatelliteAdapterConfig
+from satellite_core.logsink import LogSink
+from satellite_core.registry import Registry
+from satellite_core.webrtc.signaling import SignalingService
 
 pytestmark = pytest.mark.asyncio
 

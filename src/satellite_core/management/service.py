@@ -12,10 +12,10 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from .config import SatelliteAdapterConfig
-from .logsink import LogSink
-from .models import LogLevel, LogSource, SatelliteConfig
-from .registry import Registry
+from ..config import SatelliteAdapterConfig
+from ..logsink import LogSink
+from ..models import LogLevel, LogSource, SatelliteConfig
+from ..registry import Registry
 
 
 class ManagementService:
@@ -54,21 +54,50 @@ class ManagementService:
     def heartbeat(self, device_id: str) -> bool:
         return self._reg.heartbeat(device_id) is not None
 
-    def list_clients(self) -> list[dict[str, Any]]:
-        out = []
-        for c in self._reg.list_clients():
-            sess = self._reg.session_for_device(c.device_id)
-            out.append(
-                {
-                    "device_id": c.device_id,
-                    "device_type": c.device_type,
-                    "status": c.status.value,
-                    "last_seen": c.last_seen,
-                    "firmware_version": c.firmware_version,
-                    "active_routing_mode": c.config.routing_mode,
-                    "webrtc_state": sess.webrtc_state if sess else "none",
-                }
-            )
+    def list_clients(self, *, state: str = "all") -> list[dict[str, Any]]:
+        """Return the fleet as device summaries.
+
+        ``state``:
+          - ``"adopted"`` → only adopted clients
+          - ``"pending"`` → only pending devices (feature 011 US2)
+          - ``"all"`` (default) → both, with ``adoption_state`` per row
+        """
+        if state not in ("all", "adopted", "pending"):
+            raise ValueError(f"unknown state filter: {state!r}")
+        out: list[dict[str, Any]] = []
+        if state in ("all", "adopted"):
+            for c in self._reg.list_clients():
+                sess = self._reg.session_for_device(c.device_id)
+                out.append(
+                    {
+                        "device_id": c.device_id,
+                        "name": c.name,
+                        "device_type": c.device_type,
+                        "adoption_state": c.adoption_state.value,
+                        "status": c.status.value,
+                        "last_seen": c.last_seen,
+                        "firmware_version": c.firmware_version,
+                        "active_routing_mode": c.config.routing_mode,
+                        "webrtc_state": sess.webrtc_state if sess else "none",
+                        "ota_state": c.ota_state.value,
+                    }
+                )
+        if state in ("all", "pending"):
+            for p in self._reg.list_pending():
+                out.append(
+                    {
+                        "device_id": p.device_id,
+                        "name": None,
+                        "device_type": p.device_type,
+                        "adoption_state": "pending",
+                        "status": "connecting",
+                        "last_seen": p.last_seen,
+                        "firmware_version": p.firmware_version,
+                        "active_routing_mode": None,
+                        "webrtc_state": "none",
+                        "ota_state": "idle",
+                    }
+                )
         return out
 
     def get_state(self, device_id: str) -> dict[str, Any] | None:
@@ -168,7 +197,11 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
         return web.json_response(service.register(await req.json()))
 
     async def _list(req):
-        return web.json_response(service.list_clients())
+        state = req.query.get("state", "all")
+        try:
+            return web.json_response(service.list_clients(state=state))
+        except ValueError as e:
+            return web.json_response({"error": "bad_input", "message": str(e)}, status=400)
 
     async def _state(req):
         st = service.get_state(req.match_info["id"])
@@ -187,6 +220,36 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
         return web.json_response(c) if c else web.Response(status=404)
 
     async def _logs(req):
+        # Feature 011 T027: follow=true switches to SSE live tail.
+        if req.query.get("follow") in ("1", "true", "yes"):
+            from .log_sse import sse_logs  # lazy
+            resp = web.StreamResponse(
+                status=200,
+                reason="OK",
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                },
+            )
+            await resp.prepare(req)
+            kwargs = {
+                k: req.query.get(k)
+                for k in ("device_id", "level", "source")
+                if req.query.get(k)
+            }
+            since = req.query.get("since")
+            if since:
+                try:
+                    kwargs["since"] = float(since)
+                except ValueError:
+                    pass
+            # If the path included a device id, prefer it.
+            if "id" in req.match_info:
+                kwargs["device_id"] = req.match_info["id"]
+            async for frame in sse_logs(service._sink, **kwargs):
+                await resp.write(frame.encode("utf-8"))
+            return resp
         return web.json_response(service.query_logs(**dict(req.query)))
 
     async def _ws(req):

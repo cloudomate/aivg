@@ -6,7 +6,7 @@ tolerance, dominant identifiable, and robust to missing / interrupted /
 error / empty / duplicate / out-of-order instants (FR-008/SC-003).
 """
 
-from hermes_satellite_adapter.turnlatency import (
+from satellite_core.turnlatency import (
     INSTANTS,
     build_breakdown,
 )
@@ -109,8 +109,8 @@ def test_latency_log_mode_is_config_sourced_not_hardcoded(monkeypatch):
     """SC-009/FR-011/L7: the instrumentation verbosity is READ from the
     existing satellite config block, not a hardcoded constant — changing
     the config value changes the consumed mode (no code change)."""
-    import hermes_satellite_adapter.session as sess
-    from hermes_satellite_adapter.config import SatelliteAdapterConfig
+    import satellite_core.webrtc.session as sess
+    from satellite_core.config import SatelliteAdapterConfig
 
     for want in ("full", "off", "summary"):
         cfg = SatelliteAdapterConfig(default_config={"latency_log": want})
@@ -119,7 +119,7 @@ def test_latency_log_mode_is_config_sourced_not_hardcoded(monkeypatch):
                             raising=False)
         # also patch the lazily-imported symbol path
         monkeypatch.setattr(
-            "hermes_satellite_adapter.config.load_adapter_config",
+            "satellite_core.config.load_adapter_config",
             lambda *a, **k: cfg,
         )
         assert sess._latency_log_mode() == want
@@ -127,7 +127,7 @@ def test_latency_log_mode_is_config_sourced_not_hardcoded(monkeypatch):
     # unknown / unreadable → safe default, never raises
     monkeypatch.setattr(sess, "_LAT_MODE_CACHE", None)
     monkeypatch.setattr(
-        "hermes_satellite_adapter.config.load_adapter_config",
+        "satellite_core.config.load_adapter_config",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no config")),
     )
     assert sess._latency_log_mode() == "summary"

@@ -12,7 +12,7 @@ import types
 
 import pytest
 
-from hermes_satellite_adapter.config import SatelliteAdapterConfig
+from satellite_core.config import SatelliteAdapterConfig
 
 pytestmark = pytest.mark.asyncio
 
@@ -62,7 +62,7 @@ def adapter_cfg():
 
 def _make_adapter(cfg):
     from fakes import FakeHermesBridge
-    from hermes_satellite_adapter.adapter import SatelliteWebRTCAdapter
+    from satellite_core.adapter import SatelliteWebRTCAdapter
 
     async def _tf(sdp, device_id):  # unused during start()
         raise NotImplementedError
@@ -74,7 +74,7 @@ async def test_build_signaling_app_exposes_webrtc_routes():
     _install_fake_aiohttp()
     import importlib
 
-    from hermes_satellite_adapter import signaling as sig
+    from satellite_core.webrtc import signaling as sig
     importlib.reload(sig)
     # Build with a dummy service; the call must succeed and wire 3 routes.
     captured = {}

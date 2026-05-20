@@ -6,7 +6,7 @@ deterministic sentence segmentation is fully exercised here.
 
 import pytest
 
-from hermes_satellite_adapter.textseg import MAX_CHARS, iter_sentences
+from satellite_core.webrtc.textseg import MAX_CHARS, iter_sentences
 
 
 def _nonws(s: str) -> str:

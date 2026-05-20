@@ -58,6 +58,120 @@ class LogSource(str, Enum):
     OTA = "ota"
 
 
+# Feature 011 — adoption / OTA / commands -----------------------------------
+
+
+class AdoptionState(str, Enum):
+    """Lifecycle of a device in the registry (data-model.md §2.1)."""
+
+    PENDING = "pending"
+    ADOPTED = "adopted"
+
+
+class OtaState(str, Enum):
+    """Per-device OTA progress (data-model.md §2.4)."""
+
+    IDLE = "idle"
+    CHECKING = "checking"
+    DOWNLOADING = "downloading"
+    FLASHING = "flashing"
+    REBOOTING = "rebooting"
+    FAILED = "failed"
+    ROLLED_BACK = "rolled_back"
+
+
+class CommandVerb(str, Enum):
+    """Closed enum of operator commands (R-14)."""
+
+    REBOOT = "reboot"
+    RESTART_VOICE = "restart_voice"
+    RESTART_MANAGER = "restart_manager"
+    RESET_CONFIG = "reset_config"
+    FACTORY_RESET = "factory_reset"
+    MUTE = "mute"
+    UNMUTE = "unmute"
+    IDENTIFY = "identify"
+
+
+@dataclass
+class PendingDevice:
+    """A device that has registered but not yet been adopted.
+
+    In-memory only — survives across registers but not across gateway
+    restarts (the device's next register repopulates it). Feature 011 R-7.
+    """
+
+    device_id: str
+    device_type: str  # rpi | esp32 | browser
+    firmware_version: str = ""
+    ip_address: str = ""
+    first_seen: float = field(default_factory=time.time)
+    last_seen: float = field(default_factory=time.time)
+
+    def touch(self) -> None:
+        self.last_seen = time.time()
+
+
+@dataclass
+class OtaJob:
+    """An OTA in flight or just finished (data-model.md §2.5)."""
+
+    job_id: str
+    device_id: str
+    target_version: str
+    state: OtaState = OtaState.IDLE
+    started_at: float = field(default_factory=time.time)
+    ended_at: Optional[float] = None
+    result: Optional[str] = None  # success | rolled_back | failed
+    failure_reason: Optional[str] = None
+
+
+@dataclass
+class OtaManifest:
+    """Per-device-type firmware manifest under ~/.satellite/firmware/."""
+
+    device_type: str  # rpi | esp32 — NOT browser (constitution II)
+    version: str
+    url: str
+    sha256: str
+    signature: Optional[str] = None
+    changelog: str = ""
+
+    def __post_init__(self) -> None:
+        if self.device_type == "browser":
+            raise ValueError(
+                "OTA manifest for 'browser' device_type rejected: "
+                "browser is explicitly not OTA-eligible (constitution II)."
+            )
+        if not (len(self.sha256) == 64 and all(c in "0123456789abcdef" for c in self.sha256)):
+            raise ValueError(
+                f"OtaManifest.sha256 must be 64 lowercase hex chars; got {self.sha256!r}"
+            )
+
+
+@dataclass
+class CommandRequest:
+    command: CommandVerb
+    args: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CommandResponse:
+    accepted: bool
+    scheduled_at: float = field(default_factory=time.time)
+    reason: Optional[str] = None
+
+
+@dataclass
+class RegistrySnapshot:
+    """Atomic-written persistence record (R-5, ~/.satellite/state.json)."""
+
+    schema_version: int = 1
+    saved_at: float = field(default_factory=time.time)
+    clients: list[dict[str, Any]] = field(default_factory=list)  # ConnectedClient.to_dict
+    device_limit: int = 10
+
+
 @dataclass
 class SatelliteConfig:
     """Persisted device + server config (Appendix B defaults)."""
@@ -90,6 +204,15 @@ class ConnectedClient:
     active_session_id: Optional[str] = None
     config: SatelliteConfig = field(default_factory=SatelliteConfig)
     last_error: Optional[str] = None
+
+    # Feature 011 — adoption + persistence + OTA tracking
+    name: Optional[str] = None  # human-set during adopt; required once adopted
+    adoption_state: AdoptionState = AdoptionState.ADOPTED  # entries here are adopted
+    config_version: int = 0  # monotonic (R-11)
+    config_updated_at: float = field(default_factory=time.time)
+    ota_state: OtaState = OtaState.IDLE
+    ota_version: Optional[str] = None
+    ota_job_id: Optional[str] = None
 
     def touch(self) -> None:
         self.last_seen = time.time()

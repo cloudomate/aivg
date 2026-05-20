@@ -14,10 +14,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable, Optional
 
-from .hermes_bridge import HermesBridge
-from .logsink import LogSink
-from .models import LogLevel, LogSource
-from .registry import Registry
+from ..platforms.hermes.bridge import HermesBridge  # AgentPlatform-coupling-TODO
+from ..logsink import LogSink
+from ..models import LogLevel, LogSource
+from ..registry import Registry
 from .session import MediaTransport, Session
 
 # A transport factory turns an SDP offer into (answer_sdp, MediaTransport).

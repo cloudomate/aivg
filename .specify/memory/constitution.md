@@ -1,42 +1,58 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: (template / unversioned) → 1.0.0
-Bump rationale: Initial ratification of the project constitution from the
-  generic-voice-satellite design (docs/generic-voice-satellite-design.md).
-  First concrete version, so MAJOR baseline 1.0.0.
+Version change: 1.0.0 → 2.0.0
+Bump rationale: MAJOR. Principle IV is **redefined** from a Hermes-specific
+  "Reuse Hermes, Don't Rebuild" rule to a platform-neutral "Reuse the
+  Upstream Agent Platform, Don't Rebuild Its Primitives" rule. The satellite
+  system is now explicitly **agent-platform-agnostic**: Hermes is the v1
+  canonical plugin; other platforms (OpenClaw, future) plug in through a
+  documented `AgentPlatform` seam. Existing constraints stay; the principle's
+  binding text is broadened, which is backward-incompatible at the rule
+  level.
 
-Principles defined (all new):
-  - I. Thin Satellite, Gateway-Owned Intelligence (NON-NEGOTIABLE)
-  - II. Generic Four-Plane Contract
-  - III. Separate Control and Voice Connections
+Modified principles:
   - IV. Reuse Hermes, Don't Rebuild
-  - V. Research-Backed, Constraint-Driven Decisions
+       → IV. Reuse the Upstream Agent Platform, Don't Rebuild Its Primitives
+  Other principles (I, II, III, V): unchanged in intent; minor wording
+  refresh where they referenced Hermes by name.
 
-Added sections:
-  - Hardware & Platform Constraints (was [SECTION_2_NAME])
-  - Development Workflow & Quality Gates (was [SECTION_3_NAME])
-  - Governance
+Added sections: none. (Plugin seam is encoded inside Principle IV; the
+  Hardware & Platform Constraints and Development Workflow sections are
+  refreshed but not added.)
 
-Removed sections: none (template placeholders fully replaced).
+Removed sections: none.
 
 Templates / artifacts status:
-  - .specify/templates/plan-template.md ✅ aligned (Constitution Check gate
-    references the constitution file generically; no hardcoded principles to
-    update)
-  - .specify/templates/spec-template.md ✅ aligned (no constitution-specific
-    bindings)
-  - .specify/templates/tasks-template.md ✅ aligned (no constitution-specific
-    bindings)
-  - .specify/templates/checklist-template.md ✅ aligned (generic)
-  - README.md / docs/quickstart.md / commands dir ⚠ not present (nothing to
-    propagate)
+  - .specify/templates/plan-template.md ✅ aligned (Constitution Check is
+    generic; no hardcoded Hermes naming to update)
+  - .specify/templates/spec-template.md ✅ aligned
+  - .specify/templates/tasks-template.md ✅ aligned
+  - .specify/templates/checklist-template.md ✅ aligned
+  - docs/generic-voice-satellite-design.md ⚠ documents Hermes integration
+    specifically; under v2.0.0 it represents the Hermes *plugin*, not the
+    whole adapter — note added at top of the satellite spec (feature 011).
+  - feature 011 plan/research/data-model/contracts ✅ updated in lock-step
+    with this amendment (rename `hermes_satellite_adapter` → `satellite_core`;
+    introduce `satellite_core/platforms/hermes/`).
+  - Prior features 001–010 use Hermes-only naming; their READMEs are
+    grandfathered (they shipped before v2.0.0). Future work tracked as
+    follow-up; no rename forced retroactively.
 
-Follow-up TODOs: none. RATIFICATION_DATE set to adoption date 2026-05-18
-  (initial adoption coincides with this constitution's creation).
+Follow-up TODOs:
+  - TODO(rename-existing-package): rename Python package
+    `hermes_satellite_adapter` → `satellite_core` and move Hermes-specific
+    code to `satellite_core/platforms/hermes/` (executed in feature 011
+    tasks).
+  - TODO(openclaw-plugin): sketch a `satellite_core/platforms/openclaw/`
+    skeleton in a follow-up feature; not part of 011's shipping scope.
 -->
 
 # Hermes Voice Satellite Constitution
+
+*Project codename: "Hermes Voice" (historical). As of v2.0.0 the satellite
+system is **agent-platform-agnostic**: Hermes is the v1 reference plugin;
+other agent platforms plug in through Principle IV's seam.*
 
 ## Core Principles
 
@@ -46,23 +62,23 @@ A satellite captures audio, decides *when* to stream it (VAD/wake word),
 transports it, and plays back what returns. It MUST NOT perform ASR, TTS, the
 agent loop, or authoritative end-of-utterance detection. All speech
 recognition, synthesis, agent reasoning, and silence/endpointing run on the
-Hermes gateway through its existing pluggable provider layer.
+gateway through whichever **agent platform** is plugged in (Principle IV).
 
 Rules:
 
 - A satellite or the WebRTC adapter MUST NOT instantiate Whisper, Piper, or
-  any STT/TTS engine directly. STT/TTS MUST be reached only through Hermes's
-  configured provider interfaces, so satellites inherit the gateway's provider
-  choice and fallbacks.
+  any STT/TTS engine directly. STT/TTS MUST be reached only through the
+  active agent platform's provider interfaces, so satellites inherit that
+  platform's provider choice and fallbacks.
 - Device-side VAD/wake word MAY *gate* the upstream stream to save bandwidth,
-  but the authoritative end-of-utterance is Hermes's existing server-side
-  silence algorithm, reused unchanged.
-- Piper is not a Hermes engine and MUST NOT be introduced.
+  but the authoritative end-of-utterance is the platform's existing server-
+  side silence algorithm, reused unchanged.
+- Piper is not a supported gateway engine and MUST NOT be introduced.
 
 Rationale: This is forced by the most constrained target (RPi Zero 2 W,
-512 MB / 1 GHz) and it makes every satellite inherit Hermes's STT/TTS
-capabilities for free. Violating it duplicates intelligence, fragments
-configuration, and breaks the constrained device.
+512 MB / 1 GHz) and it makes every satellite inherit the configured agent
+platform's STT/TTS capabilities for free. Violating it duplicates
+intelligence, fragments configuration, and breaks the constrained device.
 
 ### II. Generic Four-Plane Contract
 
@@ -82,9 +98,14 @@ Rules:
   the contract first, not improvised per device.
 - The gateway MUST remain identical for all device types; protocol-branching
   by `device_type` in the gateway registry/dashboard is prohibited.
+- The same neutrality applies across **agent platforms** (Principle IV): the
+  registry / management plane / control WS / OTA flow MUST NOT branch on
+  *which* agent platform is plugged in. Per-platform divergence belongs
+  inside the platform plugin, behind the `AgentPlatform` interface.
 
 Rationale: A single contract is what makes the design "generic"; per-device
-special cases in the gateway are the failure mode this principle prevents.
+*and* per-platform special cases in the gateway are the failure mode this
+principle prevents.
 
 ### III. Separate Control and Voice Connections
 
@@ -102,31 +123,52 @@ Rules:
   state, barge-in). Everything durable stays on the WS.
 - The satellite is the WebRTC offerer for all device types. ICE uses full
   gather-then-offer; `/webrtc/candidate` is kept only as a fallback.
+- Operator surfaces (CLI, agent-platform skill, optional UI) use a **REST
+  API** for actions; SSE/WebSocket is permitted **only** for live log
+  tailing and OTA-progress streaming consumed by the CLI's follow mode.
 
 Rationale: Coupling control availability to call state breaks online/offline
 tracking, config push, and "start a call" — wrong for a satellite.
 
-### IV. Reuse Hermes, Don't Rebuild
+### IV. Reuse the Upstream Agent Platform, Don't Rebuild Its Primitives
 
-The satellite system is a new platform adapter that plugs into the existing
-Hermes gateway exactly like the Telegram and Discord adapters — not a
-standalone pipeline or separate daemon.
+The satellite system is **agent-platform-agnostic**. It plugs into one of
+several supported upstream agent platforms (v1: Hermes; planned: OpenClaw;
+future: others) through a documented `AgentPlatform` interface. The satellite
+core MUST NOT reimplement what an agent platform already owns: STT, TTS, the
+agent loop, server-side endpointing, the platform's config file, or its
+secrets store.
 
 Rules:
 
-- The adapter MUST reuse Hermes's existing assets and MUST NOT rebuild them:
-  gateway lifecycle, `~/.hermes/config.yaml` loader, `~/.hermes/.env` secrets,
-  STT/TTS provider abstractions, the server-side silence algorithm, and
-  `~/.hermes/logs/gateway.log`.
-- New configuration MUST be added as a `satellite:` / `webrtc:` block in the
-  existing `~/.hermes/config.yaml`; no new secret store and no new config
-  loader.
-- The adapter is a thin transport + registry layer only; STT, the agent loop,
-  TTS, and endpointing are invoked through Hermes's provider interfaces.
+- A platform plugin lives in `satellite_core/platforms/<platform_name>/` and
+  implements a documented `AgentPlatform` interface that exposes at least:
+  `transcribe(audio) → text`, `agent_step(text, session) → reply_stream`,
+  `synthesize(text) → audio`, and `endpoint(audio_frame) → end_of_utterance?`.
+  Adding a new platform MUST NOT require changes anywhere else in the
+  satellite core.
+- Each platform plugin MUST reuse that platform's existing assets unchanged:
+  its gateway lifecycle (where applicable), its config file and secrets, its
+  STT/TTS provider abstractions, its server-side silence algorithm, and its
+  log destination. New satellite-side configuration goes in the satellite
+  system's own config block, never inside the upstream platform's config.
+- The Hermes plugin (v1 canonical) consumes `~/.hermes/config.yaml`,
+  `~/.hermes/.env`, Hermes's STT/TTS providers, Hermes's silence algorithm,
+  and `~/.hermes/logs/gateway.log` — verbatim, no replacement.
+- The satellite adapter is a thin transport + registry + management layer
+  only; STT, the agent loop, TTS, and endpointing are invoked through the
+  active platform plugin's `AgentPlatform` implementation.
+- Operator surfaces (CLI, skills) are platform-agnostic and MUST NOT
+  hard-depend on any one platform. A per-platform agent skill (e.g. a Hermes
+  agent skill) MAY ship alongside its platform plugin but MUST invoke the
+  satellite CLI as its execution surface, not the platform's internals.
 
-Rationale: Reusing Hermes's provider layer, config, and endpointing is the
-entire integration strategy; reimplementing any of it forks behavior and
-maintenance.
+Rationale: Reusing each platform's provider layer, config, and endpointing
+is the integration strategy; reimplementing any of it forks behavior and
+maintenance. Hard-wiring the satellite to a single platform locks the system
+to that platform's future — the project's stated goal is multi-platform
+support, so the plugin seam is the binding constraint that makes that
+possible.
 
 ### V. Research-Backed, Constraint-Driven Decisions
 
@@ -144,14 +186,19 @@ Rules:
 - Hardware revision / firmware variant MUST be physically confirmed before
   building an OS or firmware image (e.g. ReSpeaker HAT codec revision;
   XVF3800 I2S-master 48 kHz vs 16 kHz build).
+- Each new agent platform plugin MUST be exercised against the same
+  end-to-end voice loop the Hermes plugin passes, not just unit-tested in
+  isolation, before it is treated as supported.
 
 Rationale: The constrained targets fail precisely when components that look
 fine in isolation contend in practice; unverified assumptions about hardware
-have already been the documented failure mode.
+have already been the documented failure mode. The same logic extends to a
+new platform plugin: it is "supported" only when proven end-to-end.
 
 ## Hardware & Platform Constraints
 
-The three supported satellites and their binding constraints:
+The three supported satellites and their binding constraints (independent of
+which agent platform is plugged in upstream):
 
 - **RPi Zero 2 W + ReSpeaker 2-Mic HAT** — 512 MB RAM / 4×1 GHz, no hardware
   AEC, codec varies by board revision. ASR/TTS remote (non-negotiable).
@@ -176,7 +223,7 @@ Build order is mandatory and risk-ordered:
 
 1. Gateway WebRTC adapter + browser satellite first (lowest risk, AEC3 free,
    no hardware/flashing) — proves the aiortc offer/answer + Opus path into
-   Hermes's STT/TTS layer.
+   the active agent platform's STT/TTS layer.
 2. ESP32 satellite — validate I2S firmware master/slave role early; AEC is
    hardware-solved once reference routing is correct.
 3. RPi satellite last — requires the full-pipeline load test and a possible
@@ -187,15 +234,18 @@ Quality gates:
 - Each milestone MUST prove an end-to-end loop before the next begins.
 - The RPi pipeline MUST pass a combined-load test before being declared
   viable.
+- Each new agent platform plugin MUST pass the same end-to-end voice loop
+  the Hermes plugin passes before being declared supported (Principle V).
 - Any deviation from the design's stated decisions MUST be recorded with the
   constraint or evidence that justifies it.
 
 ## Governance
 
-This constitution supersedes ad-hoc practices for the Hermes voice satellite
+This constitution supersedes ad-hoc practices for the Hermes Voice satellite
 system. The authoritative design source is
-`docs/generic-voice-satellite-design.md`; this constitution distills its
-non-negotiable rules and takes precedence where the two conflict on principle.
+`docs/generic-voice-satellite-design.md`; under v2.0.0 that document
+describes the **Hermes plugin** (the v1 canonical platform). The satellite
+core itself is platform-agnostic per Principle IV.
 
 Amendment procedure:
 
@@ -215,4 +265,4 @@ Compliance review:
   against the binding constraint that requires it; unjustified violations
   block the change.
 
-**Version**: 1.0.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-18
+**Version**: 2.0.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-20

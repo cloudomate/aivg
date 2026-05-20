@@ -4,11 +4,11 @@ import asyncio
 
 import pytest
 
-from hermes_satellite_adapter.logsink import LogSink
-from hermes_satellite_adapter.models import VoiceSession
-from hermes_satellite_adapter.registry import Registry
-from hermes_satellite_adapter.session import Session
-from hermes_satellite_adapter.signaling import SignalingService
+from satellite_core.logsink import LogSink
+from satellite_core.models import VoiceSession
+from satellite_core.registry import Registry
+from satellite_core.webrtc.session import Session
+from satellite_core.webrtc.signaling import SignalingService
 
 pytestmark = pytest.mark.asyncio
 

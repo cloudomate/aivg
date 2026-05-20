@@ -1,11 +1,11 @@
-from hermes_satellite_adapter.config import SatelliteAdapterConfig
-from hermes_satellite_adapter.models import (
+from satellite_core.config import SatelliteAdapterConfig
+from satellite_core.models import (
     ClientStatus,
     ConversationTurn,
     SatelliteConfig,
     SessionState,
 )
-from hermes_satellite_adapter.registry import Registry
+from satellite_core.registry import Registry
 
 
 def test_satellite_config_defaults_match_appendix_b():
@@ -29,7 +29,7 @@ def test_adapter_config_rejects_equal_ports():
 
 
 def test_mini_yaml_parses_satellite_block(tmp_path):
-    from hermes_satellite_adapter.config import load_adapter_config
+    from satellite_core.config import load_adapter_config
 
     p = tmp_path / "config.yaml"
     p.write_text(
