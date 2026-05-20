@@ -153,13 +153,17 @@ PHASE_NAMES: frozenset[str] = frozenset({
     "confirming",
     "backup",
     # Install-only.
-    "vendoring",
+    "vendoring",           # legacy (pre-013 / shell-script-era plugins)
+    "pip_installing",      # feature 013 — Hermes-native pip + entry-point
     "config_writing",
+    "enabling_plugin",     # feature 013 — register in Hermes plugins.enabled
     "installing_deps",
     "restarting_gateway",
     "post_verifying",
     # Uninstall-only.
-    "uninstall_vendor",
+    "uninstall_vendor",    # legacy mirror of `vendoring`
+    "pip_uninstalling",    # feature 013 — mirror of `pip_installing`
+    "disabling_plugin",    # feature 013 — remove from Hermes plugins.enabled
     "uninstall_config",
     "uninstall_restart",
     # Rollback-only.
