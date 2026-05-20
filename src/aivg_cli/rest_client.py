@@ -85,6 +85,73 @@ class ManagementClient:
     async def get_device_config(self, device_id: str) -> dict:
         return await self._request("GET", f"/satellite/{device_id}/config")
 
+    async def post_device_config(
+        self,
+        device_id: str,
+        overrides: dict,
+        *,
+        if_match: int | None = None,
+        queue: bool = False,
+    ) -> dict:
+        """POST /satellite/{id}/config with optional If-Match + ?queue.
+
+        Server returns 200 on apply, 202 on queued, 409 on stale If-Match
+        (mapped to RestError code ``config_conflict``), 503 on offline
+        without ``queue=True`` (RestError code ``device_offline``).
+        """
+        assert self._client is not None
+        headers = {}
+        if if_match is not None:
+            headers["If-Match"] = str(if_match)
+        params = {"queue": "true"} if queue else None
+        try:
+            resp = await self._client.request(
+                "POST",
+                f"/satellite/{device_id}/config",
+                json=overrides,
+                params=params,
+                headers=headers,
+            )
+        except httpx.ConnectError as e:
+            raise RestError("gateway_unreachable", str(e)) from e
+        except httpx.TimeoutException as e:
+            raise RestError("gateway_unreachable", f"timeout: {e}") from e
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {"raw": resp.text}
+        if resp.status_code >= 400:
+            raise _map_status(resp.status_code, body)
+        return body
+
+    async def get_device_config_schema(self, device_id: str) -> dict:
+        return await self._request("GET", f"/satellite/{device_id}/config/schema")
+
+    # --- OTA (US4) ------------------------------------------------------
+    async def ota_check(self, device_id: str) -> dict:
+        return await self._request("POST", f"/satellite/{device_id}/ota/check")
+
+    async def ota_apply(self, device_id: str, version: str, url: str | None = None) -> dict:
+        body = {"version": version}
+        if url is not None:
+            body["url"] = url
+        return await self._request("POST", f"/satellite/{device_id}/ota/apply", json=body)
+
+    async def ota_manifest(self, device_id: str) -> dict:
+        return await self._request("GET", f"/satellite/{device_id}/ota/manifest")
+
+    # --- Commands (US5) -------------------------------------------------
+    async def post_device_command(
+        self, device_id: str, verb: str, args: dict | None = None
+    ) -> dict:
+        body = {"command": verb}
+        if args:
+            body["args"] = args
+        return await self._request("POST", f"/satellite/{device_id}/command", json=body)
+
+    async def delete_device(self, device_id: str) -> None:
+        await self._request("DELETE", f"/satellite/{device_id}")
+
     async def get_fleet_logs(self, **filters: Any) -> list[dict]:
         params = {k: v for k, v in filters.items() if v is not None}
         return await self._request("GET", "/satellite/logs", params=params)

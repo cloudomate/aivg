@@ -33,6 +33,9 @@ class Registry:
         # Optional persistence hook (feature 011 T014). Called after any
         # mutation that affects adopted clients.
         self._persist_hook: Optional[Callable[["Registry"], None]] = None
+        # Queued config writes (feature 011 US3 FR-016) — applied on the
+        # next register or heartbeat for offline devices.
+        self._queued_writes: dict[str, dict] = {}
 
     def attach_persist_hook(self, hook: Callable[["Registry"], None]) -> None:
         self._persist_hook = hook
@@ -87,6 +90,7 @@ class Registry:
         client.status = ClientStatus.ONLINE
         client.last_error = None
         client.touch()
+        self._flush_queued_writes(client)  # apply any offline-queued config (US3)
         self._persist()
         return client
 
@@ -206,7 +210,30 @@ class Registry:
         if c:
             c.status = ClientStatus.ONLINE
             c.touch()
+            self._flush_queued_writes(c)
         return c
+
+    # --- queued config writes (feature 011 US3 FR-016) ------------------
+    def queue_config_write(self, device_id: str, overrides: dict) -> None:
+        """Stash a config patch for an offline device; applied on the
+        next register/heartbeat. Subsequent writes overwrite earlier
+        queued writes for the same device (latest-pending-wins)."""
+        self._queued_writes[device_id] = overrides
+
+    def has_queued_write(self, device_id: str) -> bool:
+        return device_id in self._queued_writes
+
+    def _flush_queued_writes(self, client: ConnectedClient) -> None:
+        """Apply a pending offline-write for ``client``, if any.
+        Bumps ``config_version`` exactly once even if the device flapped
+        between register and heartbeat."""
+        pending = self._queued_writes.pop(client.device_id, None)
+        if pending is None:
+            return
+        client.config = client.config.merged(pending)
+        client.config_version += 1
+        client.config_updated_at = time.time()
+        self._persist()
 
     def mark_stale(self, *, now: float | None = None) -> list[ConnectedClient]:
         """Flip clients to OFFLINE if heartbeats lapsed (>3x interval). Entry

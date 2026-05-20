@@ -50,8 +50,16 @@ app = typer.Typer(
 device_app = typer.Typer(no_args_is_help=True, help="Per-device operations.")
 app.add_typer(device_app, name="device")
 
+device_config_app = typer.Typer(
+    no_args_is_help=True, help="Per-device configuration (get / set / schema)."
+)
+device_app.add_typer(device_config_app, name="config")
+
 fleet_app = typer.Typer(no_args_is_help=True, help="Fleet-wide views.")
 app.add_typer(fleet_app, name="fleet")
+
+ota_app = typer.Typer(no_args_is_help=True, help="Per-device OTA firmware updates.")
+app.add_typer(ota_app, name="ota")
 
 
 # --- Global state --------------------------------------------------------
@@ -161,6 +169,320 @@ def cmd_device_get(device_id: str) -> None:
         else:
             human_device_state(st)
         return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+# --- aivg device config get / set / schema (feature 011 US3) -------------
+
+
+def _coerce_field_value(raw: str):
+    """Parse a `--field key=value` value: try JSON first (catches int,
+    float, bool, null, lists, objects); fall back to raw string."""
+    import json as _json
+
+    try:
+        return _json.loads(raw)
+    except (ValueError, TypeError):
+        return raw
+
+
+@device_config_app.command("get")
+def cmd_device_config_get(device_id: str) -> None:
+    """Show a device's running configuration."""
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                cfg = await c.get_device_config(device_id)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok(cfg)
+        else:
+            human_device_state(cfg)
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+@device_config_app.command("set")
+def cmd_device_config_set(
+    device_id: str,
+    field: list[str] = typer.Option(
+        [], "--field", help="`key=value` (JSON-parsed; repeatable)."
+    ),
+    from_file: Optional[str] = typer.Option(
+        None, "--from-file", help="JSON file with overrides."
+    ),
+    if_match: Optional[int] = typer.Option(
+        None, "--if-match", help="Optimistic concurrency: fail if current config_version differs."
+    ),
+    queue: bool = typer.Option(
+        False, "--queue",
+        help="Allow queueing the write if the device is offline (else exits 2 device_offline).",
+    ),
+) -> None:
+    """Update a device's configuration."""
+    import json as _json
+
+    overrides: dict = {}
+    if from_file:
+        try:
+            overrides.update(_json.loads(open(from_file).read()))
+        except (OSError, ValueError) as e:
+            emit_error("bad_input", f"could not read --from-file {from_file!r}: {e}")
+            raise typer.Exit(BAD_INPUT)
+    for kv in field:
+        if "=" not in kv:
+            emit_error("bad_input", f"--field expects `key=value`, got {kv!r}")
+            raise typer.Exit(BAD_INPUT)
+        key, raw = kv.split("=", 1)
+        overrides[key.strip()] = _coerce_field_value(raw)
+    if not overrides:
+        emit_error("bad_input", "no overrides supplied (use --field or --from-file)")
+        raise typer.Exit(BAD_INPUT)
+
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                payload = await c.post_device_config(
+                    device_id, overrides, if_match=if_match, queue=queue
+                )
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok(payload)
+        else:
+            human_device_state(payload)
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+@device_config_app.command("schema")
+def cmd_device_config_schema(device_id: str) -> None:
+    """Show the JSON Schema for the device's editable config fields."""
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                schema = await c.get_device_config_schema(device_id)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok(schema)
+        else:
+            from rich.console import Console
+            import json as _json
+            Console().print_json(_json.dumps(schema))
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+# --- aivg device command / delete (feature 011 US5) ---------------------
+
+# Map dash-style verbs the CLI accepts to the underscore enum values.
+_VERB_ALIASES = {
+    "reboot": "reboot",
+    "restart-voice": "restart_voice",
+    "restart-manager": "restart_manager",
+    "reset-config": "reset_config",
+    "factory-reset": "factory_reset",
+    "mute": "mute",
+    "unmute": "unmute",
+    "identify": "identify",
+}
+_DESTRUCTIVE_VERBS = {"factory_reset"}
+
+
+def _confirm_destructive_or_bail(label: str) -> bool:
+    """Ask the operator to confirm a destructive action.
+
+    Under --json without --yes, refuses (FR-019); the agent/script must
+    have explicit consent before piping --yes. Under interactive mode,
+    prompts on stderr/stdin; non-`yes` cancels.
+    """
+    if G.yes:
+        return True
+    if G.json_mode:
+        emit_error(
+            "bad_input",
+            f"refusing destructive action {label!r} under --json without --yes; "
+            "ask the user to confirm in chat, then re-run with --yes",
+        )
+        return False
+    sys.stderr.write(
+        f"\n⚠️  Destructive: {label}\nType the device id or 'yes' to confirm, anything else to cancel: "
+    )
+    sys.stderr.flush()
+    ans = sys.stdin.readline().strip()
+    return ans.lower() in ("y", "yes") or len(ans) > 0 and label.endswith(ans)
+
+
+@device_app.command("command")
+def cmd_device_command(
+    device_id: str,
+    verb: str,
+    args: Optional[str] = typer.Option(
+        None, "--args", help="JSON dict of command args (e.g. `{\"duration_s\": 3}`)."
+    ),
+) -> None:
+    """Send a command to a device (one of: reboot, restart-voice,
+    restart-manager, reset-config, factory-reset, mute, unmute,
+    identify). Destructive verbs require confirmation."""
+    import json as _json
+
+    enum_verb = _VERB_ALIASES.get(verb)
+    if enum_verb is None:
+        emit_error(
+            "bad_input",
+            f"unknown verb {verb!r}; expected one of: {', '.join(sorted(_VERB_ALIASES))}",
+        )
+        raise typer.Exit(BAD_INPUT)
+    if enum_verb in _DESTRUCTIVE_VERBS and not _confirm_destructive_or_bail(
+        f"command {verb} on {device_id!r}"
+    ):
+        raise typer.Exit(BAD_INPUT)
+
+    parsed_args: Optional[dict] = None
+    if args:
+        try:
+            parsed_args = _json.loads(args)
+            if not isinstance(parsed_args, dict):
+                raise ValueError("--args must be a JSON dict")
+        except ValueError as e:
+            emit_error("bad_input", f"bad --args JSON: {e}")
+            raise typer.Exit(BAD_INPUT)
+
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                payload = await c.post_device_command(device_id, enum_verb, parsed_args)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok(payload)
+        else:
+            from rich.console import Console
+            Console().print(payload)
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+@device_app.command("delete")
+def cmd_device_delete(device_id: str) -> None:
+    """Unpair (remove) a device from the fleet — destructive."""
+    if not _confirm_destructive_or_bail(f"delete {device_id!r} from the fleet"):
+        raise typer.Exit(BAD_INPUT)
+
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                await c.delete_device(device_id)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok({"deleted": device_id})
+        else:
+            from rich.console import Console
+            Console().print(f"[red]✓[/] removed {device_id}")
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+# --- aivg ota check / apply / manifest (feature 011 US4) ----------------
+
+
+@ota_app.command("check")
+def cmd_ota_check(device_id: str) -> None:
+    """Check whether the device has a firmware update available."""
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                payload = await c.ota_check(device_id)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok(payload)
+        else:
+            from rich.console import Console
+            Console().print(payload)
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+@ota_app.command("manifest")
+def cmd_ota_manifest(device_id: str) -> None:
+    """Show the firmware manifest for this device's type."""
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                payload = await c.ota_manifest(device_id)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+        if G.json_mode:
+            emit_ok(payload)
+        else:
+            from rich.console import Console
+            import json as _json
+            Console().print_json(_json.dumps(payload))
+        return OK
+
+    raise typer.Exit(_run(_do()))
+
+
+@ota_app.command("apply")
+def cmd_ota_apply(
+    device_id: str,
+    version: str,
+    follow: bool = typer.Option(
+        False, "--follow", "-f",
+        help="Stream device-reported OTA progress until terminal state.",
+    ),
+    url: Optional[str] = typer.Option(None, "--url", help="Override the manifest URL."),
+) -> None:
+    """Apply a firmware update (US4)."""
+    async def _do() -> int:
+        async with await _client() as c:
+            try:
+                job = await c.ota_apply(device_id, version, url=url)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+            if not follow:
+                if G.json_mode:
+                    emit_ok(job)
+                else:
+                    from rich.console import Console
+                    Console().print(job)
+                return OK
+            # --follow: open the SSE log stream filtered to source=ota,
+            # emit each progress event as NDJSON until terminal state.
+            from .output import emit_ndjson
+            terminal_states = {"failed", "rolled_back"}
+            success_terminal = False
+            try:
+                async for entry in c.follow_device_logs(device_id, source="ota"):
+                    if G.json_mode:
+                        emit_ndjson(entry)
+                    else:
+                        from .output import human_log_entry
+                        human_log_entry(entry)
+                    meta = (entry.get("metadata") or {})
+                    result = meta.get("result")
+                    if result == "success":
+                        success_terminal = True
+                        break
+                    if result in terminal_states or meta.get("state") in terminal_states:
+                        # Map terminal failure to exit 5 + typed error.
+                        code = "rolled_back" if (result == "rolled_back" or meta.get("state") == "rolled_back") else "ota_failed"
+                        emit_error(code, meta.get("failure_reason") or f"OTA terminated: {result or meta.get('state')}")
+                        return map_error_to_exit_code(code)
+            except RestError as e:
+                return _bail_on_rest_error(e)
+            return OK if success_terminal else OK  # OK if interrupted
 
     raise typer.Exit(_run(_do()))
 

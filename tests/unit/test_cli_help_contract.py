@@ -1,0 +1,97 @@
+"""Unit: CLI help/contract surface (feature 011 T074).
+
+Every command documented in cli-contract.md has --help; every flag
+listed in the contract is present; --contract-version is unchanged.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _aivg(*args: str) -> str:
+    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
+    return subprocess.run(
+        [sys.executable, "-m", "aivg_cli.cli", *args],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout
+
+
+# --- commands documented in cli-contract.md ----------------------------
+
+
+def test_root_help_lists_every_documented_top_level_command():
+    out = _aivg("--help")
+    for cmd in ("list", "watch", "logs", "device", "fleet", "ota", "onboard"):
+        assert cmd in out, f"top-level command {cmd!r} missing from --help"
+
+
+def test_device_subcommands():
+    out = _aivg("device", "--help")
+    for cmd in ("get", "config", "command", "delete"):
+        assert cmd in out, f"`device {cmd}` missing from device --help"
+
+
+def test_device_config_subcommands():
+    out = _aivg("device", "config", "--help")
+    for cmd in ("get", "set", "schema"):
+        assert cmd in out, f"`device config {cmd}` missing"
+
+
+def test_ota_subcommands():
+    out = _aivg("ota", "--help")
+    for cmd in ("check", "apply", "manifest"):
+        assert cmd in out, f"`ota {cmd}` missing"
+
+
+def test_fleet_subcommands():
+    out = _aivg("fleet", "--help")
+    assert "logs" in out
+
+
+# --- global flags & version contract ------------------------------------
+
+
+def test_global_flags_present():
+    out = _aivg("--help")
+    for flag in (
+        "--gateway", "--json", "--yes", "--timeout",
+        "--verbose", "--no-color", "--version", "--contract-version",
+    ):
+        assert flag in out, f"global flag {flag!r} missing"
+
+
+def test_contract_version_unchanged():
+    out = _aivg("--json", "--contract-version")
+    import json as _json
+    env = _json.loads(out.strip().splitlines()[-1])
+    assert env["data"]["contract_version"] == "1.0.0", (
+        "rebrand and US3/US4/US5 implementations MUST NOT bump the "
+        "contract version — they're additive, not breaking"
+    )
+
+
+def test_device_command_help_lists_args_flag():
+    out = _aivg("device", "command", "--help")
+    assert "--args" in out
+
+
+def test_device_config_set_help_lists_optimistic_concurrency_flags():
+    out = _aivg("device", "config", "set", "--help")
+    for flag in ("--field", "--from-file", "--if-match", "--queue"):
+        assert flag in out, f"`device config set` missing {flag!r}"
+
+
+def test_ota_apply_help_has_follow_flag():
+    out = _aivg("ota", "apply", "--help")
+    assert "--follow" in out

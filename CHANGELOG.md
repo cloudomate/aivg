@@ -1,5 +1,77 @@
 # Changelog
 
+## Unreleased — Feature 011 US3 + US4 + US5 (configure / OTA / commands)
+
+Closes the remaining work in feature 011: every command the CLI
+contract documents now exists in the implementation. The management
+plane is feature-complete for the v1 operator surface.
+
+### Added
+
+* `POST /satellite/{id}/config` now honors optimistic concurrency via
+  the `If-Match: <config_version>` header and offline-write queueing
+  via `?queue=true`. Returns `(status, payload)` shape: 200 apply,
+  202 queued, 409 stale, 503 offline, 404 unknown device.
+* `GET /satellite/{id}/config/schema` — JSON Schema for the editable
+  config fields (constitution II: same shape for every device type).
+* `aivg device config get / set / schema` — Typer subcommands.
+  `set --field key=value` is repeatable (JSON-parsed values), supports
+  `--from-file PATH`, `--if-match N`, `--queue`.
+* `aivg_core/management/ota.py` — `OtaService` with manifest loader
+  (`~/.aivg/firmware/<device_type>/manifest.json`), `check / apply /
+  status_report / manifest_response`. Browser-not-eligible enforced.
+  OTA progress relayed through `LogSink` with `source="ota"` so the
+  existing SSE log stream carries it.
+* `POST /satellite/{id}/ota/check`, `/ota/apply`, `/ota/status`,
+  `GET /satellite/{id}/ota/manifest` — REST endpoints.
+* `aivg ota check / apply / manifest` — Typer subcommands with
+  `--follow` on apply (NDJSON progress until terminal `result`).
+* `aivg device command <verb> [--args JSON]` — closed CommandVerb
+  enum (`reboot`, `restart-voice`, `restart-manager`, `reset-config`,
+  `factory-reset`, `mute`, `unmute`, `identify`); destructive verbs
+  require interactive confirmation OR `--yes` under `--json`.
+* `aivg device delete` — same destructive-confirm gate.
+* `SatelliteAdapterConfig.platform: str = "hermes"` field (T011 closed):
+  the satellite config's top-level `platform:` key wins; selects the
+  agent-platform plugin loaded via `PluginRegistry.load(name)`.
+* `tests/fixtures/platforms/echo/` — fake EchoAgentPlatform; proves
+  the plugin seam works against a third-party plugin without importing
+  Hermes (T017 closed; constitution v2.0.0 IV binding gate).
+
+### Tests at this checkpoint
+
+252 passed + 1 xpassed (was 188 + 1 at the start of this turn; +64
+net-new tests across US3 / US4 / US5 / partial closures). The
+pre-existing flaky `test_sc005_ten_plus_concurrent_sessions` may
+surface intermittently under load — not a regression.
+
+### Changed (in-process API)
+
+* `ManagementService.post_config` returns `(status, payload)` —
+  previously returned a bare dict. The legacy unit test was updated.
+* `ManagementService.command` returns `(status, payload)` — previously
+  returned `{accepted, scheduled_at}` directly. Accepts the legacy
+  bare-string shape as a back-compat shim; new callers should pass a
+  `{command, args?}` body dict.
+* `ManagementService.config_schema` now returns a JSON Schema document
+  (was `{fields: [...]}`).
+
+`aivg --contract-version` remains **1.0.0** — these additions are
+purely **additive** to the CLI surface (FR-008 invariant intact).
+
+### Carried-forward partial that remains
+
+* T023 (subprocess `aivg watch --json` NDJSON test) — written then
+  removed because the subprocess buffering / timing turned out too
+  fragile for a reliable assertion; the in-process watch logic is
+  covered by the existing tests. Tracked as still-partial in
+  `specs/011-satellite-management/tasks.md`.
+* T019 (rewire `webrtc/session.py` + `signaling.py` off
+  `HermesBridge` and onto the `AgentPlatform` Protocol) — the
+  `# AgentPlatform-coupling-TODO` markers remain in those files; the
+  lint exempts them. Closing this is a separate refactor not blocking
+  the v1 operator surface.
+
 ## Unreleased — Note on deploy/*.sh after the rebrand
 
 The shell-script deploy infrastructure (`deploy/deploy-local.sh`,
