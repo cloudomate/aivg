@@ -204,6 +204,26 @@ export class InternalVoiceSession {
     };
   }
 
+  /**
+   * Enable/disable the outbound mic track without tearing down the PC.
+   *
+   * Use for PTT-style UX: build the session once on connect/adopt, mute
+   * by default, unmute on press and mute on release. This matches the
+   * legacy electron-test's behaviour and avoids creating a new PC per
+   * utterance (which races the gateway-side silence detector — the
+   * detector needs ~3 s of silence after speech to trigger STT, so a
+   * mouseup that tears down the PC inside that window means STT never
+   * fires).
+   *
+   * No-op if the session has no local stream yet. Idempotent.
+   */
+  setMicEnabled(enabled: boolean): void {
+    if (!this.localStream) return;
+    for (const track of this.localStream.getAudioTracks()) {
+      track.enabled = enabled;
+    }
+  }
+
   /** Caller-initiated close. */
   close(reason: VoiceSessionResult["reason"] = "operator_ended"): void {
     if (!this.active) return;

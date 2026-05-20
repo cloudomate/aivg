@@ -255,6 +255,31 @@ export class Satellite {
     return this.beginPromise;
   }
 
+  /**
+   * Enable/disable the outbound mic track without tearing down the
+   * voice session. Use for PTT — call `mute()` on release and
+   * `unmute()` on press, keeping `beginSession()` alive between
+   * utterances. The legacy electron-test used this model to avoid
+   * racing the gateway's silence detector (~3 s window).
+   */
+  mute(): void {
+    this.currentSession?.setMicEnabled(false);
+    this._micEnabled = false;
+  }
+  unmute(): void {
+    this.currentSession?.setMicEnabled(true);
+    this._micEnabled = true;
+  }
+  /**
+   * `true` when there's an active session whose mic track is enabled.
+   * Approximate (we don't poll the track state) — flipped by
+   * mute()/unmute().
+   */
+  get isMicLive(): boolean {
+    return this.currentSession !== null && this._micEnabled;
+  }
+  private _micEnabled = true;
+
   /** End the active session. Returns once resources are released. */
   endSession(): Promise<void> {
     const s = this.currentSession;

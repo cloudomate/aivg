@@ -1,6 +1,9 @@
 /* Living integration test for @aivg/sat-sdk (feature 014 / US4).
- * Two-connections invariant + Chromium AEC3 + full-gather ICE live
- * in the SDK now. This file is the SDK's first consumer (SC-002). */
+ *
+ * PTT model: long-lived voice session, toggle the mic track on
+ * press/release. Tearing down the PC on every mouseup races the
+ * gateway-side silence detector (~3 s window) and means STT never
+ * runs. Mirrors the legacy electron-test's pattern. */
 import { Satellite } from "@aivg/sat-sdk";
 
 const $ = (id) => document.getElementById(id);
@@ -18,10 +21,16 @@ function start() {
   });
   sat.on("adoption", (e) => {
     log(`adoption: ${e.state}${e.firstApproval ? " ✓" : ""}`);
-    // Belt-and-suspenders: the button is also enabled on connect()
-    // resolve below, but the first adoption event is the strictly-stronger
-    // signal that the gateway has us registered.
-    if (e.state === "adopted") $("ptt").disabled = false;
+    if (e.state === "adopted" && !sat._sessionStarting) {
+      // Open the voice session ONCE on first adoption. PTT will mute/unmute
+      // the mic track inside this long-lived session.
+      sat._sessionStarting = true;
+      sat.mute(); // start muted — mic only goes live during PTT press
+      sat.beginSession().then(
+        () => { log(`voice session ready; press & hold PTT to talk`); $("ptt").disabled = false; },
+        (err) => log(`beginSession failed: ${err.code ?? "?"}: ${err.message}`),
+      );
+    }
   });
   sat.on("state", (e) => {
     $("state").textContent = e.current;
@@ -29,20 +38,26 @@ function start() {
       $("lat").textContent = Math.round(performance.now() - eosAt); eosAt = 0;
     }
   });
+  sat.on("gateway_state", (g) => log(`gw: ${g.state}`));
   sat.on("transcript", (d) =>
     $(d.speaker === "user" ? "tx" : "rep").textContent = d.text);
   sat.on("log", (e) => log(`[${e.level}] ${e.source}: ${e.message}`));
   sat.on("error", (e) => log(`! ${e.code}: ${e.message}`));
   sat.on("transient_error", (e) => log(`~ ${e.code}: ${e.message}`));
-  sat.on("session_ended", (r) => log(`session ended: ${r.reason}`));
+  sat.on("session_ended", (r) => { log(`session ended: ${r.reason}`); sat._sessionStarting = false; });
+  sat.on("barge_in", () => log("barge-in"));
   sat.connect().then(
-    () => { log(`connected — adopt with: aivg device adopt ${DEVICE_ID}`); $("ptt").disabled = false; },
+    () => log(`connected — run: aivg device adopt ${DEVICE_ID}`),
     (err) => log(`connect failed: ${err.code ?? "?"}: ${err.message}`),
   );
 }
 
 $("connect").onclick = start;
-$("ptt").onmousedown = () => { $("state").textContent = "listening (PTT)"; sat?.beginSession().catch((e) => log(`begin: ${e.code}: ${e.message}`)); };
-$("ptt").onmouseup = () => { eosAt = performance.now(); $("state").textContent = "thinking"; sat?.endSession(); };
-$("ptt").onmouseleave = () => { if (sat?.state === "listening") { eosAt = performance.now(); sat.endSession(); } };
-$("stats").onclick = () => log(sat ? `state=${sat.state} adopted=${sat.isAdopted}` : "not connected");
+// PTT toggles the mic track inside the long-lived voice session.
+// Mark end-of-speech on release for latency measurement.
+$("ptt").onmousedown = () => { sat?.unmute(); $("state").textContent = "listening (PTT)"; };
+$("ptt").onmouseup = () => { sat?.mute(); eosAt = performance.now(); $("state").textContent = "thinking"; };
+$("ptt").onmouseleave = () => { if (sat?.isMicLive) { sat.mute(); eosAt = performance.now(); } };
+$("stats").onclick = () => log(sat
+  ? `state=${sat.state} adopted=${sat.isAdopted} mic=${sat.isMicLive ? "live" : "muted"}`
+  : "not connected");

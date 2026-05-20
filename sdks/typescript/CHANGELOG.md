@@ -5,6 +5,38 @@ All notable changes to `@aivg/sat-sdk` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] — 2026-05-20
+
+### Added
+
+- `Satellite.mute()` / `Satellite.unmute()` — toggle the outbound mic
+  track without tearing down the voice session. Use for push-to-talk
+  UX: build the session once on connect/adopt and toggle the mic
+  per utterance, instead of building a fresh PeerConnection on every
+  PTT mousedown.
+- `Satellite.isMicLive` — read-only flag; `true` when there's an
+  active session and the mic track is enabled.
+- `VoiceSession.setMicEnabled(boolean)` — underlying primitive that
+  `mute()`/`unmute()` delegate to.
+
+### Fixed
+
+- **PTT race against the gateway silence detector.** 0.1.0–0.1.2's
+  recommended PTT pattern called `beginSession()` on mousedown and
+  `endSession()` on mouseup. The gateway's endpoint detector waits
+  ~3 s of silence after speech before triggering STT, so a mouseup
+  that tore down the PC inside that window meant STT never ran for
+  the utterance. Result on live electron-test: many sessions created,
+  zero transcripts produced. The new mute/unmute model keeps the PC
+  alive across utterances and lets the silence detector trigger
+  normally.
+
+### Changed
+
+- `clients/electron-test/renderer.js` refactored to the new PTT model:
+  opens the voice session ONCE on first `adoption: adopted` event
+  (muted), then PTT mousedown/mouseup just toggle the mic.
+
 ## [0.1.2] — 2026-05-20
 
 ### Fixed
