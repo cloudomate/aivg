@@ -1,114 +1,63 @@
-/* Satellite #3 test client (design §5). Two connections (constitution III):
- *  - always-on control WS  (register/heartbeat)
- *  - per-call RTCPeerConnection, client = offerer, FULL ICE GATHER → offer
- * Chromium AEC3 handles local echo (browser_aec3). No STT/TTS/agent here. */
+/* Living integration test for @aivg/sat-sdk (feature 014 / US4).
+ *
+ * PTT model: long-lived voice session, toggle the mic track on
+ * press/release. Tearing down the PC on every mouseup races the
+ * gateway-side silence detector (~3 s window) and means STT never
+ * runs. Mirrors the legacy electron-test's pattern. */
+import { Satellite } from "@aivg/sat-sdk";
+
 const $ = (id) => document.getElementById(id);
-const log = (m) => { $("log").textContent += m + "\n"; $("log").scrollTop = 1e9; };
-const setState = (s) => ($("state").textContent = s);
+const log = (m) => ($("log").textContent += m + "\n", $("log").scrollTop = 1e9);
 
 const DEVICE_ID = "electron-test-1";
-let pc, ws, micStream, speaking = false, eosAt = 0;
+let sat = null;
+let eosAt = 0;
 
-async function fullGatherOffer(pc) {
-  await pc.setLocalDescription(await pc.createOffer());
-  if (pc.iceGatheringState === "complete") return pc.localDescription;
-  return new Promise((res) => {
-    const chk = () => { if (pc.iceGatheringState === "complete") {
-      pc.removeEventListener("icegatheringstatechange", chk); res(pc.localDescription); } };
-    pc.addEventListener("icegatheringstatechange", chk);
+function start() {
+  sat = new Satellite({
+    gatewayUrl: $("mgmt").value,
+    deviceId: DEVICE_ID, deviceName: DEVICE_ID,
+    deviceType: "electron", firmwareVersion: "0.2.0",
   });
+  sat.on("adoption", (e) => {
+    log(`adoption: ${e.state}${e.firstApproval ? " ✓" : ""}`);
+    if (e.state === "adopted" && !sat._sessionStarting) {
+      // Open the voice session ONCE on first adoption. PTT will mute/unmute
+      // the mic track inside this long-lived session.
+      sat._sessionStarting = true;
+      sat.mute(); // start muted — mic only goes live during PTT press
+      sat.beginSession().then(
+        () => { log(`voice session ready; press & hold PTT to talk`); $("ptt").disabled = false; },
+        (err) => log(`beginSession failed: ${err.code ?? "?"}: ${err.message}`),
+      );
+    }
+  });
+  sat.on("state", (e) => {
+    $("state").textContent = e.current;
+    if (e.previous === "listening" && e.current === "speaking" && eosAt) {
+      $("lat").textContent = Math.round(performance.now() - eosAt); eosAt = 0;
+    }
+  });
+  sat.on("gateway_state", (g) => log(`gw: ${g.state}`));
+  sat.on("transcript", (d) =>
+    $(d.speaker === "user" ? "tx" : "rep").textContent = d.text);
+  sat.on("log", (e) => log(`[${e.level}] ${e.source}: ${e.message}`));
+  sat.on("error", (e) => log(`! ${e.code}: ${e.message}`));
+  sat.on("transient_error", (e) => log(`~ ${e.code}: ${e.message}`));
+  sat.on("session_ended", (r) => { log(`session ended: ${r.reason}`); sat._sessionStarting = false; });
+  sat.on("barge_in", () => log("barge-in"));
+  sat.connect().then(
+    () => log(`connected — run: aivg device adopt ${DEVICE_ID}`),
+    (err) => log(`connect failed: ${err.code ?? "?"}: ${err.message}`),
+  );
 }
 
-async function connect() {
-  const mgmt = $("mgmt").value, webrtc = $("webrtc").value, wsUrl = $("ws").value;
-
-  // 1) Control plane (always-on, independent of any call).
-  ws = new WebSocket(wsUrl);
-  ws.onopen = () => { ws.send(JSON.stringify({ type: "register",
-    device_id: DEVICE_ID, device_type: "browser", firmware_version: "0.1.0" }));
-    log("control WS open; registered"); };
-  ws.onmessage = (e) => {
-    let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (m.type === "state") setState(m.state);
-    else if (m.type === "partial_transcript") $("tx").textContent = m.text;
-    else if (m.type === "barge_in") log("server: barge-in");
-  };
-  ws.onclose = () => log("control WS closed (will need reconnect)");
-  setInterval(() => ws?.readyState === 1 &&
-    ws.send(JSON.stringify({ type: "heartbeat", device_id: DEVICE_ID })), 30000);
-
-  // 2) Mic (Chromium AEC/NS/AGC ON — handles echo on-device).
-  try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: {
-      echoCancellation: true, noiseSuppression: true, autoGainControl: true,
-      channelCount: 1, sampleRate: 48000 } });
-  } catch (err) {
-    log("MIC DENIED: " + err +
-      "\n→ macOS: System Settings ▸ Privacy & Security ▸ Microphone. Test cannot pass without mic.");
-    return;
-  }
-
-  // 3) Voice PC — client is the offerer.
-  pc = new RTCPeerConnection();
-  micStream.getTracks().forEach((t) => { t.enabled = false; pc.addTrack(t, micStream); });
-  pc.ontrack = (ev) => {
-    // aiortc may not advertise a MediaStream id, so ev.streams can be empty
-    // even though RTP arrives — fall back to wrapping the bare track.
-    const ms = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
-    const far = $("far");
-    far.srcObject = ms;
-    far.muted = false;
-    far.play().then(() => log("far audio playing (" + ev.track.kind + ")"))
-      .catch((e) => log("far .play() blocked: " + e + " — click the page once"));
-    ev.track.onunmute = () => { if (eosAt) {
-      $("lat").textContent = Math.round(performance.now() - eosAt); eosAt = 0; } };
-  };
-  const offer = await fullGatherOffer(pc);
-  const r = await fetch(webrtc + "/webrtc/offer", { method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sdp: offer.sdp, type: "offer", device_id: DEVICE_ID }) });
-  const ans = await r.json();
-  await pc.setRemoteDescription(ans);
-  log("WebRTC connected (offer full-gathered, answer applied)");
-  $("ptt").disabled = false;
-}
-
-// Push-to-talk (v1, no wake word). Releasing marks end-of-speech for latency.
-function talk(on) {
-  if (!micStream) return;
-  speaking = on;
-  micStream.getAudioTracks().forEach((t) => (t.enabled = on));
-  if (on) { setState("listening (PTT)"); }
-  else { eosAt = performance.now(); setState("thinking"); }
-}
-$("connect").onclick = () => connect().catch((e) => log("ERR " + e));
-const ptt = $("ptt");
-ptt.onmousedown = () => talk(true);
-ptt.onmouseup = () => talk(false);
-ptt.onmouseleave = () => speaking && talk(false);
-
-// Inbound-audio diagnostics → printed into the log panel (no DevTools).
-$("stats").onclick = async () => {
-  if (!pc) { log("stats: not connected"); return; }
-  try {
-    const s = await pc.getStats();
-    let out = "— inbound audio stats —\n";
-    s.forEach((r) => {
-      if (r.type === "inbound-rtp" && r.kind === "audio")
-        out += `inbound-rtp pkts=${r.packetsReceived} bytes=${r.bytesReceived} ` +
-          `lost=${r.packetsLost} audioLevel=${r.audioLevel} ` +
-          `energy=${r.totalAudioEnergy} samples=${r.totalSamplesReceived} ` +
-          `concealed=${r.concealedSamples} jbDelay=${r.jitterBufferDelay}\n`;
-      if (r.type === "transport")
-        out += `transport bytesReceived=${r.bytesReceived} bytesSent=${r.bytesSent}\n`;
-    });
-    const far = $("far");
-    const t = far.srcObject && far.srcObject.getAudioTracks()[0];
-    out += `far: muted=${far.muted} paused=${far.paused} vol=${far.volume} ` +
-           `readyState=${far.readyState} sinkId=${far.sinkId || "default"}\n`;
-    out += `recv-track: ${t ? `muted=${t.muted} enabled=${t.enabled} state=${t.readyState}` : "none"}\n`;
-    out += `outputs: ${(await navigator.mediaDevices.enumerateDevices())
-      .filter((d) => d.kind === "audiooutput").map((d) => d.label || d.deviceId).join(" | ") || "none"}\n`;
-    log(out);
-  } catch (e) { log("stats ERR " + e); }
-};
+$("connect").onclick = start;
+// PTT toggles the mic track inside the long-lived voice session.
+// Mark end-of-speech on release for latency measurement.
+$("ptt").onmousedown = () => { sat?.unmute(); $("state").textContent = "listening (PTT)"; };
+$("ptt").onmouseup = () => { sat?.mute(); eosAt = performance.now(); $("state").textContent = "thinking"; };
+$("ptt").onmouseleave = () => { if (sat?.isMicLive) { sat.mute(); eosAt = performance.now(); } };
+$("stats").onclick = () => log(sat
+  ? `state=${sat.state} adopted=${sat.isAdopted} mic=${sat.isMicLive ? "live" : "muted"}`
+  : "not connected");

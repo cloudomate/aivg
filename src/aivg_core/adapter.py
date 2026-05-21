@@ -1,9 +1,12 @@
 """``SatelliteWebRTCAdapter`` — registered like the telegram/discord adapters.
 
-Constitution IV: this is a platform adapter loaded BY the Hermes gateway, not a
-standalone daemon. It owns transport + registry only; all intelligence is
-behind ``hermes_bridge``. The production registration shim against the running
-Hermes platform-adapter base is verification gate VG-4 (research.md / T039).
+Constitution IV: this is a platform adapter loaded BY an agent-platform's
+gateway, not a standalone daemon. Feature 015 closed the runtime side of
+the AgentPlatform seam: this module imports only the platform-neutral
+:class:`~aivg_core.platforms.base.AgentPlatform` Protocol and resolves
+the active platform via :class:`PluginRegistry`. The Hermes-specific
+registration shim against the Hermes platform-adapter base lives in
+:func:`build_platform_entry` below.
 """
 
 from __future__ import annotations
@@ -15,7 +18,11 @@ from typing import Optional
 from .config import SatelliteAdapterConfig, load_adapter_config
 from .logsink import LogSink
 from .management.service import ManagementService, build_management_app
-from .platforms.hermes.bridge import HermesBridge, UnboundHermesBridge  # AgentPlatform-coupling-TODO
+from .platforms.base import (
+    AgentPlatform,
+    PluginRegistry,
+    _validate_agent_platform,
+)
 from .registry import Registry
 from .webrtc.signaling import SignalingService, aiortc_transport_factory
 
@@ -25,7 +32,7 @@ class SatelliteWebRTCAdapter:
 
     def __init__(
         self,
-        bridge: Optional[HermesBridge] = None,
+        platform: Optional[AgentPlatform] = None,
         config_path: Optional[Path] = None,
         cfg: Optional[SatelliteAdapterConfig] = None,
         transport_factory=aiortc_transport_factory,
@@ -33,17 +40,29 @@ class SatelliteWebRTCAdapter:
         self.cfg = cfg or load_adapter_config(config_path)
         self.registry = Registry()
         self.sink = LogSink()
-        # Real bridge wiring is VG-1..VG-4; until then the unbound bridge fails
-        # loudly so the constitution-I boundary cannot be silently bypassed.
-        self.bridge: HermesBridge = bridge or UnboundHermesBridge()
+        # Feature 015 / FR-001 / FR-007: resolve the active agent
+        # platform via the plugin registry (defaults to "hermes" via
+        # adapter config). Validate the surface fail-fast at startup so
+        # a misconfigured plugin can never accept a single inbound
+        # frame.
+        if platform is None:
+            platform = PluginRegistry.load(self.cfg.platform)
+        _validate_agent_platform(platform)
+        self.platform: AgentPlatform = platform
         self.management = ManagementService(self.registry, self.sink, self.cfg)
         self.signaling = SignalingService(
-            self.registry, self.bridge, self.sink, transport_factory,
+            self.registry, self.platform, self.sink, transport_factory,
             # Fan call-scoped UI events (state/partial transcript/barge-in)
             # onto the control-plane WS subscribers (constitution III).
             ui_broadcast=self.management._broadcast,
         )
         self._sites: list = []
+        # Feature 017 — optional ESPHome native API transport. Off by
+        # default; opt-in via ``transports.esphome_api.enabled`` for
+        # server mode or ``transports.esphome_api.devices`` for client
+        # (dialer) mode. Constructed lazily in :meth:`start`.
+        self._esphome_transport = None
+        self._esphome_dialer = None
 
     # --- Hermes platform-adapter lifecycle (VG-4 shim) -------------------
     async def start(self) -> None:  # pragma: no cover - needs aiohttp
@@ -81,9 +100,65 @@ class SatelliteWebRTCAdapter:
                 f"to avoid a half-up adapter (FR-005)."
             ) from exc
 
+        # 3) Feature 017 — optional ESPHome native API transport. Two
+        #    sub-modes (independent — both, either, or neither):
+        #      a) server mode: AIVG listens on port 6053 (linux-voice-
+        #         assistant-style satellites dial AIVG).
+        #      b) client mode: AIVG dials out to configured ESPHome
+        #         devices (the standard direction for real ESP32
+        #         firmware that listens on 6053 and advertises mDNS).
+        #    Both modes route through the same AgentPlatform via the
+        #    shared ``Session`` class — Principle IV preserved.
+        es_cfg = self.cfg.transports.esphome_api
+        if es_cfg.enabled or es_cfg.devices:
+            from pathlib import Path
+            from .transports.esphome.auth import KeystoreResolver  # noqa: WPS433
+            keystore = KeystoreResolver(Path(es_cfg.api_key_file).expanduser())
+
+            if es_cfg.enabled:
+                from .transports.esphome import EsphomeTransport  # noqa: WPS433
+                self._esphome_transport = EsphomeTransport(
+                    registry=self.registry,
+                    platform=self.platform,
+                    sink=self.sink,
+                    host=es_cfg.host,
+                    port=es_cfg.port,
+                    api_key_resolver=keystore,
+                    bootstrap_key=es_cfg.bootstrap_key,
+                    ui_broadcast=self.management._broadcast,
+                )
+                await self._esphome_transport.start()
+
+            if es_cfg.devices:
+                # Feature 017 v1.1: client-mode uses
+                # ``aioesphomeapi.APIClient`` via the library's
+                # ``ReconnectLogic`` (handles noise + framing +
+                # reconnect + version-skew). The original
+                # hand-rolled :mod:`.dialer` had a subtle noise-
+                # cipher-state drift bug against modern ESPHome
+                # firmware (2026.5.0); switching to the upstream
+                # library eliminates that whole class of issues.
+                from .transports.esphome.api_client_dialer import (  # noqa: WPS433
+                    EsphomeApiClientDialer,
+                )
+                self._esphome_dialer = EsphomeApiClientDialer(
+                    registry=self.registry,
+                    platform=self.platform,
+                    sink=self.sink,
+                    devices=es_cfg.devices,
+                    ui_broadcast=self.management._broadcast,
+                )
+                await self._esphome_dialer.start()
+
     async def stop(self) -> None:  # pragma: no cover - needs aiohttp
         for runner in self._sites:
             await runner.cleanup()
+        if self._esphome_transport is not None:
+            await self._esphome_transport.stop()
+            self._esphome_transport = None
+        if self._esphome_dialer is not None:
+            await self._esphome_dialer.stop()
+            self._esphome_dialer = None
         self._sites.clear()
 
 
@@ -124,32 +199,50 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
     )
     from gateway.session import SessionSource  # type: ignore
 
-    from .platforms.hermes.bridge import HermesV013Bridge, SessionCtx  # AgentPlatform-coupling-TODO
-
     class _SatellitePlatformAdapter(BasePlatformAdapter):
         def __init__(self, config) -> None:
             super().__init__(config, Platform.LOCAL)
 
-            # agent_runner bridges the gateway's async handle_message→send
-            # path into the value HermesV013Bridge.agent_turn awaits.
-            async def _run_agent(text: str, ctx: SessionCtx) -> str:
+            # Feature 015: the gateway-routing callback that used to be
+            # injected into ``HermesV013Bridge(agent_runner=…)`` directly
+            # is now plumbed through the AgentPlatform's ``startup``
+            # ``gateway_config["agent_runner"]``. The Hermes plugin
+            # (HermesAgentPlatform) reads it there and re-attaches it
+            # onto its internal bridge. Adapter.py stays plugin-neutral:
+            # it never names HermesV013Bridge.
+            #
+            # The runner's contract: ``async (text, ctx) -> str`` where
+            # ``ctx`` carries ``session_id``/``device_id``. We keep the
+            # SessionCtx-shaped argument because Hermes's
+            # ``HermesV013Bridge.agent_turn`` calls runner with a
+            # SessionCtx — plugin-internal detail.
+            self._satellite_reply_futs: dict = {}
+
+            async def _run_agent(text: str, ctx) -> str:
                 fut: "asyncio.Future[str]" = asyncio.get_event_loop().create_future()
                 self._satellite_reply_futs[ctx.session_id] = fut
                 await self.handle_message(self._make_event(text, ctx))
                 return await fut
 
-            self._satellite_reply_futs: dict = {}
-            # Feature 008: the agent text-delta seam + barge-in's
-            # AIAgent.interrupt() live INSIDE HermesV013Bridge.agent_stream
-            # (research.md D2/D5). The adapter only retains the
-            # handle_message→send-future path, used solely as the FR-005
-            # feature-006 fallback when the delta seam is unavailable; the
-            # gateway draft-streaming hook is NOT implemented here (it was
-            # proven unreachable for the LOCAL/voice path — research.md D1).
-            self._bridge = HermesV013Bridge(agent_runner=_run_agent)
-            self._impl = SatelliteWebRTCAdapter(bridge=self._bridge)
+            self._agent_runner = _run_agent
+            # Load the active agent platform via the plugin registry
+            # (constitution IV / FR-001). The adapter never names a
+            # specific plugin class.
+            from .platforms.base import PluginRegistry  # noqa: WPS433 - host-only path
+            self._platform = PluginRegistry.load(self._impl_cfg_platform())
+            self._impl = SatelliteWebRTCAdapter(platform=self._platform)
 
-        def _make_event(self, text: str, ctx: SessionCtx):
+        def _impl_cfg_platform(self) -> str:
+            """Resolve the adapter-config ``platform:`` key without
+            forcing a full adapter construction. Loads the same
+            ``~/.satellite/config.yaml`` block the inner
+            :class:`SatelliteWebRTCAdapter` will read again — duplicated
+            once here so we can pick the platform BEFORE handing it to
+            the inner ctor."""
+            from .config import load_adapter_config  # noqa: WPS433
+            return load_adapter_config().platform
+
+        def _make_event(self, text: str, ctx):
             source = SessionSource(
                 platform=Platform.LOCAL,
                 chat_id=ctx.session_id,
@@ -161,11 +254,23 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
         # BasePlatformAdapter.__abstractmethods__ (v0.13.0) =
         #   {connect, disconnect, get_chat_info, send} — all implemented.
         async def connect(self) -> bool:
+            # Feature 015: thread the gateway-routing agent_runner into
+            # the platform via its ``startup`` gateway_config. The
+            # Hermes plugin reads ``gateway_config["agent_runner"]`` and
+            # attaches it onto its internal bridge; other plugins ignore
+            # the key.
+            await self._platform.startup(
+                gateway_config={"agent_runner": self._agent_runner}
+            )
             await self._impl.start()
             return True
 
         async def disconnect(self) -> None:
             await self._impl.stop()
+            try:
+                await self._platform.shutdown()
+            except Exception:  # noqa: BLE001 - teardown must never raise
+                pass
 
         async def get_chat_info(self, chat_id):
             # chat_id == VoiceSession.session_id; this is a 1:1 voice "dm".

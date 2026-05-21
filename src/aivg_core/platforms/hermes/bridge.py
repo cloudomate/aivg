@@ -19,12 +19,14 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Protocol, runtime_checkable
 
 
-class AllProvidersUnavailable(RuntimeError):
-    """Raised when every configured provider (and its fallbacks) failed.
-
-    The session turns this into a perceptible failure rather than silence or a
-    hung session (FR-015).
-    """
+# Re-export the canonical, plugin-neutral exception from
+# ``platforms.base`` so existing imports
+# (``from aivg_core.platforms.hermes.bridge import AllProvidersUnavailable``
+# — used by tests and by Hermes-internal call sites) keep working
+# verbatim. Feature 015 lifted the definition to ``base`` so the
+# satellite core can import it without naming the Hermes plugin
+# (SC-006 grep gate).
+from ..base import AllProvidersUnavailable  # noqa: F401  (re-export)
 
 
 class _EmptyAfterStrip(Exception):
@@ -350,7 +352,8 @@ class HermesV013Bridge:
         """
         import asyncio
 
-        from .textseg import iter_sentences  # noqa: WPS433
+        # Same fix as streamasm above: textseg lives under aivg_core.webrtc.
+        from ...webrtc.textseg import iter_sentences  # noqa: WPS433
 
         units = iter_sentences(text)
         if not units:
@@ -490,7 +493,11 @@ class HermesV013Bridge:
         """
         import asyncio
 
-        from .streamasm import IncrementalUnitAssembler  # noqa: WPS433
+        # streamasm lives under aivg_core.webrtc, not next to bridge.py.
+        # Was `.streamasm` which silently failed every turn → ModuleNotFoundError
+        # got swallowed by session._respond's task-level error handling,
+        # making the whole STT→agent→TTS chain go dark right after STT.
+        from ...webrtc.streamasm import IncrementalUnitAssembler  # noqa: WPS433
 
         if not user_text.strip():
             return  # empty input → empty / tool-only turn

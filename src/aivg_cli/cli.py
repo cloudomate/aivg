@@ -33,7 +33,12 @@ from .output import (
 from .rest_client import ManagementClient, RestError
 from .stream import stream_log_entries
 
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.1.0"  # feature 017 — additive ESPHome transport (was "1.0.0")
+# The transports list is REPORTED by the gateway at runtime (it knows which
+# listeners are bound). The CLI-side fallback emits both names because the
+# enabled-state isn't queryable from the CLI without hitting the gateway;
+# operators rely on this as a "what transports CAN the gateway speak?" hint.
+SUPPORTED_TRANSPORTS = ["webrtc", "esphome_api"]
 
 app = typer.Typer(
     name="aivg",
@@ -60,6 +65,19 @@ app.add_typer(fleet_app, name="fleet")
 
 ota_app = typer.Typer(no_args_is_help=True, help="Per-device OTA firmware updates.")
 app.add_typer(ota_app, name="ota")
+
+# Feature 013 — `aivg setup` / `aivg deploy` (platform-agnostic host install).
+from .setup import setup_app  # noqa: E402  (after `app` is defined)
+app.add_typer(
+    setup_app,
+    name="setup",
+    help="Install AIVG into the active agent platform (Hermes / OpenClaw / ...).",
+)
+app.add_typer(
+    setup_app,
+    name="deploy",
+    help="Synonym for `aivg setup`. Same flags, same behavior.",
+)
 
 
 # --- Global state --------------------------------------------------------
@@ -98,10 +116,17 @@ def _root(
 ) -> None:
     set_context(json_mode=json_mode, no_color=no_color, verbose=verbose)
     if show_version:
-        emit_ok({"version": __version__, "contract_version": CONTRACT_VERSION})
+        emit_ok({
+            "version": __version__,
+            "contract_version": CONTRACT_VERSION,
+            "transports": SUPPORTED_TRANSPORTS,
+        })
         raise typer.Exit(OK)
     if show_contract:
-        emit_ok({"contract_version": CONTRACT_VERSION})
+        emit_ok({
+            "contract_version": CONTRACT_VERSION,
+            "transports": SUPPORTED_TRANSPORTS,
+        })
         raise typer.Exit(OK)
 
     G.gateway = gateway

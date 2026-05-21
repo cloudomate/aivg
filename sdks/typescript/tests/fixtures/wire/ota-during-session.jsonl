@@ -1,0 +1,6 @@
+{ "comment": "OTA manifest arrives mid-voice-session. SDK MUST forward but NOT auto-disconnect (FR-018).", "captured_against": "gateway contract 1.0.0" }
+{ "ts": 1.0, "dir": "in", "kind": "ws_text", "body": { "type": "registered", "adoption_state": "adopted" } }
+{ "ts": 2.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "transcript_delta", "session_id": "s-1", "seq": 1, "ts": 2.0, "payload": { "speaker": "user", "text": "tell me a story", "final": true } } }
+{ "ts": 3.0, "dir": "in", "kind": "ws_text", "body": { "type": "ota_manifest", "manifest": { "version": "0.2.0", "url": "https://example.com/ota/0.2.0.bin", "sha256": "deadbeef", "manifest_id": "m-otalogged-1", "apply_by": "2099-01-01T00:00:00Z" } } }
+{ "ts": 4.0, "dir": "in", "kind": "ws_text", "body": { "type": "agent_event", "kind": "transcript_delta", "session_id": "s-1", "seq": 2, "ts": 4.0, "payload": { "speaker": "assistant", "text": "Once upon a time...", "final": false } } }
+{ "ts": 5.0, "dir": "in", "kind": "ws_text", "body": { "type": "ota_progress", "manifest_id": "m-otalogged-1", "state": "checking" } } }

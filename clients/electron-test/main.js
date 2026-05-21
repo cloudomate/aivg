@@ -24,6 +24,9 @@ function createWindow() {
   });
 
   win.loadFile("renderer.html");
+  // Auto-open DevTools so the operator sees any renderer-side JS error
+  // immediately. Comment out for non-dev builds.
+  win.webContents.openDevTools({ mode: "right" });
 }
 
 app.whenReady().then(createWindow);

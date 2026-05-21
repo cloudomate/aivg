@@ -10,7 +10,9 @@ State machine (data-model.md):
     any → error → (teardown / re-offer) → idle
 
 Constitution I: STT / endpointing / agent / TTS are reached ONLY via the
-``HermesBridge`` seam. At most one turn in flight per session (FR-012).
+:class:`~aivg_core.platforms.base.AgentPlatform` Protocol — never by
+naming a specific plugin. At most one turn in flight per session
+(FR-012). Feature 015 closed the runtime side of this seam.
 """
 
 from __future__ import annotations
@@ -20,12 +22,7 @@ import time
 import uuid
 from typing import Optional, Protocol
 
-from ..platforms.hermes.bridge import (  # AgentPlatform-coupling-TODO
-    AgentReply,
-    AllProvidersUnavailable,
-    HermesBridge,
-    SessionCtx,
-)
+from ..platforms.base import AgentPlatform, AllProvidersUnavailable, EndpointResult
 from ..logsink import LogSink
 from ..turnlatency import build_breakdown
 from ..models import (
@@ -83,18 +80,20 @@ class MediaTransport(Protocol):
     async def close(self) -> None: ...
 
 
-async def _reply_audio(bridge, text: str, ctx):
-    """Yield reply audio in order. If the bridge can stream
-    (``tts_stream`` — the real Hermes bridge), speak it sentence-by-sentence
-    (feature 006); otherwise fall back to a single synthesized clip so the
-    fake-transport conversation suite behaves byte-identically to before
-    (FR-008 / SC-006 — no test changes)."""
-    stream = getattr(bridge, "tts_stream", None)
+async def _reply_audio(platform: "AgentPlatform", text: str):
+    """Yield reply audio in order. Feature 015: the platform contract
+    surfaces just ``synthesize(text) -> bytes`` (single clip) — older
+    Hermes-bridge-flavoured ``tts_stream`` is still useful for
+    per-sentence pipelining, so we shape-detect it as a plugin-internal
+    optimisation (Hermes exposes it via the bridge that
+    ``HermesAgentPlatform`` wraps). Plugins that lack it just produce
+    one clip per call."""
+    stream = getattr(platform, "tts_stream", None)
     if stream is not None:
-        async for audio in stream(text, ctx=ctx):
+        async for audio in stream(text):
             yield audio
     else:
-        yield await bridge.tts_synthesize(text, ctx=ctx)
+        yield await platform.synthesize(text)
 
 
 class Session:
@@ -102,21 +101,33 @@ class Session:
         self,
         model: VoiceSession,
         transport: MediaTransport,
-        bridge: HermesBridge,
+        platform: AgentPlatform,
         sink: LogSink,
         ui_sink: "Optional[callable]" = None,
     ) -> None:
         self.model = model
         self._transport = transport
-        self._bridge = bridge
+        # Feature 015 / FR-002: Session consumes the canonical
+        # AgentPlatform Protocol; no platform-specific symbol crosses
+        # this constructor.
+        self._platform = platform
+        # Cache the optional feature-008 ``agent_stream`` extension at
+        # session construction (FR-006). The per-turn responder checks
+        # this attribute instead of calling ``getattr`` on every turn.
+        self._agent_stream = getattr(platform, "agent_stream", None)
         self._sink = sink
         # Call-scoped UI events ONLY (partial transcript, listening/speaking,
         # barge-in). Production wires this to a single SCTP datachannel on the
         # voice PC. Durable control NEVER flows here (constitution III).
         self._ui_sink = ui_sink
-        self._ctx = SessionCtx(device_id=model.device_id, session_id=model.session_id)
         self._stopped = asyncio.Event()
         self._pending_frame: Optional[bytes] = None
+        # Sticky EOF flag: set when an inbound ``None`` (transport
+        # closed) was already consumed by the barge-in watcher and
+        # must still be reported to the main loop's next receive.
+        # Without this, the watcher silently swallowed the EOF and the
+        # main loop would block forever in :meth:`_next_frame`.
+        self._eof_seen: bool = False
 
     def _ui(self, kind: str, **data) -> None:
         if self._ui_sink is None:
@@ -170,13 +181,9 @@ class Session:
         if self._pending_frame is not None:
             f, self._pending_frame = self._pending_frame, None
             return f
+        if self._eof_seen:
+            return None  # consume the sticky EOF once, then resume normal recv
         return await self._transport.receive()
-
-    async def _one(self, frame: bytes):
-        async def gen():
-            yield frame
-
-        return gen()
 
     # --- main loop -------------------------------------------------------
     async def run(self) -> None:
@@ -204,7 +211,7 @@ class Session:
             if frame is None:
                 return None
             buf.append(frame)
-            sig = await self._bridge.detect_endpoint(await self._one(frame), ctx=self._ctx)
+            sig: EndpointResult = await self._platform.endpoint(frame)
             if sig.end_of_utterance:
                 return buf
         return None
@@ -222,13 +229,20 @@ class Session:
         # breakdown simply starts at endpoint_detected (FR-008).
         _ep = time.monotonic()
         turn.lat_instants["endpoint_detected"] = _ep
-        _sil = getattr(self._bridge, "_silence_secs", None)
+        # Feature 010 stamping: the silence_secs reach is plugin-internal
+        # (Hermes config → bridge → platform). Read via the agreed
+        # private attribute name the Hermes plugin exposes; absent on
+        # other platforms → omit the field, breakdown starts at
+        # endpoint_detected (FR-008).
+        _sil = getattr(self._platform, "_silence_secs", None)
         if isinstance(_sil, (int, float)) and _sil >= 0:
             turn.lat_instants["end_of_speech"] = _ep - float(_sil)
         try:
             self._set_state(SessionState.THINKING)
-            turn.user_text = await self._bridge.stt_transcribe(
-                b"".join(utterance), ctx=self._ctx
+            # Inbound PCM was decoded to s16 mono @ 48000 Hz by the
+            # transport (see signaling._SR); pass that rate explicitly.
+            turn.user_text = await self._platform.transcribe(
+                b"".join(utterance), sample_rate=48000
             )
             self._stamp(turn, "stt_done")
             self._log(LogLevel.INFO, LogSource.ASR, "transcribed", text=turn.user_text)
@@ -241,25 +255,67 @@ class Session:
             )
 
             if watcher in done and not pipeline.done():
-                # Barge-in: cancel the in-flight reply within the deadline.
-                t0 = time.monotonic()
-                await self._transport.stop_playback()
-                pipeline.cancel()
-                try:
-                    await asyncio.wait_for(pipeline, timeout=BARGE_IN_DEADLINE_S)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
-                self._pending_frame = watcher.result()
-                turn.outcome = TurnOutcome.INTERRUPTED
-                self._ui("barge_in")
-                self._log(
-                    LogLevel.INFO,
-                    LogSource.SYSTEM,
-                    "barge-in",
-                    stop_ms=(time.monotonic() - t0) * 1000.0,
-                )
+                w_frame = watcher.result()
+                if w_frame is None:
+                    # Transport closed mid-turn. Cancel the pipeline,
+                    # mark the turn FAILED, and let the main loop pick
+                    # up the EOF on its next receive (no _pending_frame
+                    # stash — we don't fabricate a frame).
+                    pipeline.cancel()
+                    try:
+                        await asyncio.wait_for(pipeline, timeout=BARGE_IN_DEADLINE_S)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                    turn.outcome = TurnOutcome.FAILED
+                else:
+                    # Barge-in: cancel the in-flight reply within the deadline.
+                    t0 = time.monotonic()
+                    await self._transport.stop_playback()
+                    pipeline.cancel()
+                    try:
+                        await asyncio.wait_for(pipeline, timeout=BARGE_IN_DEADLINE_S)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
+                    self._pending_frame = w_frame
+                    turn.outcome = TurnOutcome.INTERRUPTED
+                    self._ui("barge_in")
+                    self._log(
+                        LogLevel.INFO,
+                        LogSource.SYSTEM,
+                        "barge-in",
+                        stop_ms=(time.monotonic() - t0) * 1000.0,
+                    )
             else:
+                # Pipeline won the race. Cancel the watcher and reap
+                # whatever frame it may have already consumed from the
+                # transport — otherwise an inbound EOF / speech-start
+                # would be silently swallowed and the next
+                # ``_collect_utterance`` could block forever (observed
+                # under concurrent test load).
                 watcher.cancel()
+                eaten: Optional[bytes] = None
+                eof_eaten = False
+                try:
+                    if watcher.done():
+                        # Watcher had already finished before cancel —
+                        # reap its result.
+                        eaten = watcher.result()
+                    else:
+                        eaten = await watcher  # may raise CancelledError
+                except asyncio.CancelledError:
+                    eaten = None
+                except Exception:  # noqa: BLE001
+                    eaten = None
+                else:
+                    if eaten is None:
+                        eof_eaten = True
+                if eaten is not None:
+                    # The watcher consumed a real frame just before
+                    # cancellation landed (speech-start while pipeline
+                    # was wrapping up). Re-stash for the next turn.
+                    self._pending_frame = eaten
+                if eof_eaten:
+                    self._eof_seen = True
                 with_exc = pipeline.exception() if pipeline.done() else None
                 if with_exc:
                     raise with_exc
@@ -286,23 +342,26 @@ class Session:
             self._set_state(SessionState.LISTENING)
 
     async def _respond(self, turn: ConversationTurn) -> None:
-        # Feature 007: if the bridge can stream the answer AS the agent
-        # composes it (``agent_stream`` — the real Hermes bridge consuming
-        # Hermes's own draft-streaming hook), speak each sentence the moment
-        # it is final, while the agent is still generating the rest
-        # (FR-001/FR-002). SPEAKING is entered on the FIRST unit, not after
-        # the whole reply. The fake bridge has no ``agent_stream`` → the
-        # feature-006 path below runs verbatim, so the fake-transport suite
-        # is byte-identical (FR-005 / FR-009 / SC-007).
-        streamer = getattr(self._bridge, "agent_stream", None)
+        # Feature 015 / FR-006: if the platform exposes the OPTIONAL
+        # ``agent_stream`` extension (feature 008 delta-+ per-sentence
+        # synth path — the Hermes plugin forwards to the bridge here),
+        # speak each sentence the moment it is final while the agent is
+        # still generating the rest. Caching is in ``__init__`` so this
+        # per-turn site never pays a hasattr cost. Plugins without the
+        # extension fall through to the ``agent_step + synthesize`` path
+        # below — byte-identical to the feature-006 baseline for the
+        # fake-transport suite (FR-005 / FR-009 / SC-007).
+        streamer = self._agent_stream
         if streamer is not None:
             spoke = False
-            # Each send_audio blocks until that unit has drained (feature
-            # 005), so the barge-in watcher stays live for the whole reply;
-            # cancelling this task tears down agent_stream, which abandons
-            # not-yet-played/synthesised units AND interrupts the still-
-            # running agent (FR-004).
-            async for audio in streamer(turn.user_text, ctx=self._ctx, turn=turn):
+            # Each send_audio blocks until that unit has drained
+            # (feature 005), so the barge-in watcher stays live for the
+            # whole reply; cancelling this task tears down agent_stream,
+            # which abandons not-yet-played/synthesised units AND
+            # interrupts the still-running agent (FR-004).
+            async for audio in streamer(
+                turn.user_text, session_id=self.model.session_id, turn=turn
+            ):
                 if not spoke:
                     self._set_state(SessionState.SPEAKING)
                     spoke = True
@@ -310,29 +369,48 @@ class Session:
                 await self._transport.send_audio(audio)
             return  # empty / tool-only → never entered SPEAKING; to listening
 
-        reply: AgentReply = await self._bridge.agent_turn(turn.user_text, ctx=self._ctx)
-        turn.agent_text = reply.text
-        if reply.is_empty or not reply.text:
+        # Baseline path: accumulate text deltas, then synthesise.
+        # R-2 empty-reply convention: accumulated ``.strip() == ""``
+        # means tool-only / empty turn → skip synthesis cleanly
+        # (constitution I — no Piper fallback for empty replies).
+        acc: list[str] = []
+        async for delta in self._platform.agent_step(
+            turn.user_text, self.model.session_id
+        ):
+            acc.append(delta)
+        reply_text = "".join(acc)
+        turn.agent_text = reply_text
+        if not reply_text.strip():
             return  # empty / tool-only turn → clean return to listening
         self._set_state(SessionState.SPEAKING)
-        # Feature 006: speak the reply in order, one speakable unit at a time.
-        # Each send_audio blocks until that unit has drained (feature 005),
-        # so the barge-in watcher stays live across the whole streamed reply
-        # and cancelling this task abandons not-yet-played/synthesized units.
-        _spoke_006 = False
-        async for audio in _reply_audio(self._bridge, reply.text, self._ctx):
-            if not _spoke_006:
-                _spoke_006 = True
+        # Per-sentence pipelining if the platform exposes ``tts_stream``;
+        # otherwise one synthesis call. Each ``send_audio`` blocks until
+        # that unit drains (feature 005) so barge-in stays live.
+        _spoke = False
+        async for audio in _reply_audio(self._platform, reply_text):
+            if not _spoke:
+                _spoke = True
                 self._stamp(turn, "first_audio_delivered")  # feature 010
             await self._transport.send_audio(audio)
 
-    async def _watch_for_bargein(self) -> bytes:
-        """Return the first inbound frame that Hermes flags as speech start."""
+    async def _watch_for_bargein(self) -> Optional[bytes]:
+        """Return the first inbound frame the platform's server-side
+        endpoint detector flags as speech start, or ``None`` if the
+        transport closed (EOF) while we were watching (constitution
+        I — device-side VAD never substitutes).
+
+        The pre-feature-015 implementation stalled on ``await
+        sleep(3600)`` after consuming an EOF frame, which lost the
+        EOF signal — under concurrency the next ``_collect_utterance``
+        then blocked forever instead of returning. Returning the EOF
+        signals teardown so :meth:`_handle_turn` can re-stash it on
+        :attr:`_pending_frame` for the main loop to observe (FR-014
+        edge: transport drops while watching)."""
         while True:
             frame = await self._transport.receive()
             if frame is None:
-                await asyncio.sleep(3600)  # transport gone; let pipeline win
-            sig = await self._bridge.detect_endpoint(await self._one(frame), ctx=self._ctx)
+                return None  # transport gone — propagate EOF
+            sig: EndpointResult = await self._platform.endpoint(frame)
             if sig.speech_started:
                 return frame
 

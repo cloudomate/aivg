@@ -32,14 +32,22 @@ def test_version_json_envelope():
     assert env["ok"] is True
     assert env["v"] == 1
     assert "version" in env["data"]
-    assert env["data"]["contract_version"] == "1.0.0"  # unchanged in rebrand
+    # Feature 017: additive bump 1.0.0 → 1.1.0 (new ESPHome transport
+    # is opt-in; same-major SDK compat preserved).
+    assert env["data"]["contract_version"] == "1.1.0"
 
 
-def test_contract_version_unchanged():
+def test_contract_version_bumped_minor_for_esphome_transport():
+    """Feature 017 bumped the contract minor (1.0.0 → 1.1.0) when it
+    added the additive ESPHome native API transport. The transports
+    list MUST enumerate which wires the gateway can speak."""
     res = _aivg("--json", "--contract-version")
     assert res.returncode == 0
     env = json.loads(res.stdout.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "1.0.0"
+    assert env["data"]["contract_version"] == "1.1.0"
+    transports = env["data"].get("transports", [])
+    assert "webrtc" in transports
+    assert "esphome_api" in transports
 
 
 def test_help_tagline_mentions_aivg_not_legacy_product_name():

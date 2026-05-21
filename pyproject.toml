@@ -15,6 +15,26 @@ dependencies = [
     "httpx>=0.27",
     "typer>=0.12",
     "rich>=13",
+    # Feature 013 — `aivg setup` parses + mutates Hermes's config.yaml
+    # (to add the `satellite:` block + register `aivg-satellite` in
+    # `plugins.enabled`). PyYAML is the de-facto choice and is already
+    # pulled in transitively by aiortc + Hermes itself, but pinning here
+    # so a standalone `pip install aivg-core` is self-sufficient.
+    "PyYAML>=6",
+    # Feature 017 — the ESPHome Voice Assistant transport reuses the
+    # upstream proto-generated message types (``aioesphomeapi.api_pb2``)
+    # and the varint framing helpers (``aioesphomeapi.core``) so AIVG
+    # never invents an ESPHome wire format. Pinned to the range that
+    # currently ships with Home Assistant + ESPHome 2024.x firmware.
+    "aioesphomeapi>=45,<46",
+    # Feature 017 (post-MVP, client-mode noise encryption). ESPHome
+    # 2026.1+ removed the plaintext API password; modern firmware
+    # speaks Noise_NNpsk0_25519_ChaChaPoly_SHA256 exclusively. These
+    # are aioesphomeapi's own crypto deps, surfaced here so AIVG can
+    # depend on them directly for the client-mode dialer's noise
+    # handshake path.
+    "noiseprotocol>=0.3,<0.4",
+    "chacha20poly1305-reuseable>=0.13,<0.14",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +51,17 @@ dev = [
 aivg = "aivg_cli.cli:app"
 # (Legacy `sat-cli` alias was removed in feature 012 Phase 9 / T048.
 # The compat-shim window closed with the shim deletion.)
+
+# Feature 013 — Hermes-native plugin distribution. When this package is
+# `pip install`'d into a Hermes venv, the gateway's plugin loader picks
+# up this entry point (group `hermes_agent.plugins`) and calls
+# `register(ctx)` on the module below. See:
+#   - Hermes plugin guide §"Distribute via pip"
+#   - Hermes loader: `hermes_cli/plugins.py` (ENTRY_POINTS_GROUP)
+# The entry-point name (`aivg-satellite`) is what `hermes plugins list`
+# shows under source=entrypoint.
+[project.entry-points."hermes_agent.plugins"]
+aivg-satellite = "aivg_core.platforms.hermes.plugin_entrypoint"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -213,6 +213,11 @@ class ConnectedClient:
     ota_state: OtaState = OtaState.IDLE
     ota_version: Optional[str] = None
     ota_job_id: Optional[str] = None
+    # Feature 017 — which transport carried the device's registration.
+    # Default "webrtc" preserves back-compat for every existing device
+    # record. ESPHome-transport devices set this to "esphome_api"
+    # explicitly at register time.
+    transport: str = "webrtc"
 
     def touch(self) -> None:
         self.last_seen = time.time()
@@ -252,6 +257,9 @@ class VoiceSession:
     bitrate_tx: int = 0
     bitrate_rx: int = 0
     last_error: Optional[str] = None
+    # Feature 017 — which transport carried this session. Default
+    # "webrtc"; ESPHome-transport sessions set this to "esphome_api".
+    transport: str = "webrtc"
 
     def touch(self) -> None:
         self.last_activity = time.time()

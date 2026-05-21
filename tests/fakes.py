@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncIterator, Optional
 
+from aivg_core.platforms.base import EndpointResult
 from aivg_core.platforms.hermes.bridge import (
     AgentReply,
     AllProvidersUnavailable,
@@ -24,7 +25,19 @@ _MARKERS = (EOU, SPEECH)
 
 class FakeHermesBridge:
     """Endpoint authority stays with the bridge (constitution I): markers in
-    the audio frames decide turn boundaries, not any device-side VAD."""
+    the audio frames decide turn boundaries, not any device-side VAD.
+
+    Feature 015: dual-implements the
+    :class:`aivg_core.platforms.base.AgentPlatform` Protocol so the
+    session loop can accept this test double directly as its
+    ``platform=`` argument (no bridge-→-platform adapter needed).
+    The original bridge-shaped methods (``detect_endpoint``,
+    ``stt_transcribe``, ``agent_turn``, ``tts_synthesize``) remain for
+    tests that exercise the bridge surface directly.
+    """
+
+    # AgentPlatform Protocol: stable lowercase identifier.
+    name: str = "fake-hermes"
 
     def __init__(
         self,
@@ -41,6 +54,8 @@ class FakeHermesBridge:
         self.providers_down = providers_down
         self.reply_prefix = reply_prefix
         self.calls: list[str] = []
+
+    # ----- bridge-shaped surface (preserved for tests that target it) -----
 
     async def detect_endpoint(
         self, pcm_stream: AsyncIterator[bytes], *, ctx: SessionCtx
@@ -74,6 +89,46 @@ class FakeHermesBridge:
         if self.providers_down:
             raise AllProvidersUnavailable("tts down")
         return b"AUDIO:" + text.encode()
+
+    # ----- AgentPlatform Protocol surface (feature 015) -------------------
+
+    async def startup(self, *, gateway_config: dict) -> None:
+        return None
+
+    async def shutdown(self) -> None:
+        return None
+
+    async def transcribe(self, audio: bytes, *, sample_rate: int) -> str:
+        ctx = SessionCtx(device_id="-", session_id="-")
+        return await self.stt_transcribe(audio, ctx=ctx)
+
+    async def agent_step(
+        self,
+        text: str,
+        session_id: str,
+        *,
+        history: Optional[list[dict]] = None,
+    ) -> AsyncIterator[str]:
+        ctx = SessionCtx(device_id="-", session_id=session_id)
+        reply = await self.agent_turn(text, ctx=ctx)
+        if reply.is_empty or not (reply.text or "").strip():
+            return
+        yield reply.text
+
+    async def synthesize(self, text: str) -> bytes:
+        ctx = SessionCtx(device_id="-", session_id="-")
+        return await self.tts_synthesize(text, ctx=ctx)
+
+    async def endpoint(self, frame: bytes) -> EndpointResult:
+        async def _one():
+            yield frame
+        sig = await self.detect_endpoint(
+            _one(), ctx=SessionCtx(device_id="-", session_id="-")
+        )
+        return EndpointResult(
+            end_of_utterance=sig.end_of_utterance,
+            speech_started=sig.speech_started,
+        )
 
 
 class FakeTransport(MediaTransport):

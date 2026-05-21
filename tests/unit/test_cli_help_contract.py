@@ -32,8 +32,29 @@ def _aivg(*args: str) -> str:
 
 def test_root_help_lists_every_documented_top_level_command():
     out = _aivg("--help")
-    for cmd in ("list", "watch", "logs", "device", "fleet", "ota", "onboard"):
+    for cmd in ("list", "watch", "logs", "device", "fleet", "ota", "onboard", "setup", "deploy"):
         assert cmd in out, f"top-level command {cmd!r} missing from --help"
+
+
+# --- feature 013: setup / deploy commands -------------------------------
+
+
+def test_setup_help_lists_every_setup_flag():
+    """`aivg setup --help` lists every flag from setup-cli-contract.md."""
+    out = _aivg("setup", "--help")
+    for flag in (
+        "--platform", "--preflight", "--uninstall", "--restore-backup",
+        "--parity-check", "--yes", "--force", "--legacy-hermes", "--no-tune",
+        "--phrase",
+    ):
+        assert flag in out, f"`aivg setup --help` missing {flag!r}"
+
+
+def test_deploy_help_mirrors_setup_help():
+    """FR-001: `aivg deploy` is an exact synonym of `aivg setup`."""
+    out = _aivg("deploy", "--help")
+    for flag in ("--platform", "--preflight", "--uninstall", "--yes"):
+        assert flag in out, f"`aivg deploy --help` missing {flag!r}"
 
 
 def test_device_subcommands():
@@ -71,13 +92,17 @@ def test_global_flags_present():
         assert flag in out, f"global flag {flag!r} missing"
 
 
-def test_contract_version_unchanged():
+def test_contract_version_minor_bump_for_esphome_transport():
+    """Feature 017 bumped the contract minor (1.0.0 → 1.1.0) to add
+    the additive ESPHome native API transport. Additive minor bumps
+    are allowed; the SDKs' same-major compatibility check passes."""
     out = _aivg("--json", "--contract-version")
     import json as _json
     env = _json.loads(out.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "1.0.0", (
-        "rebrand and US3/US4/US5 implementations MUST NOT bump the "
-        "contract version — they're additive, not breaking"
+    assert env["data"]["contract_version"] == "1.1.0", (
+        "feature 017 minor-bumped to 1.1.0 (additive: ESPHome transport). "
+        "Same-major compat is preserved; SDKs that check major-version "
+        "still work."
     )
 
 

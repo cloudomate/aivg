@@ -1,11 +1,14 @@
 {
   "name": "hermes-satellite-electron-test",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Minimal Electron satellite-#3 client to live-test the deployed Hermes voice adapter (feature 003). No STT/TTS/agent libs (constitution I).",
+  "description": "Living integration test for @aivg/sat-sdk — minimal Electron satellite client that consumes the SDK as its only protocol implementation (feature 014 / US4). No STT/TTS/agent libs (constitution I).",
   "main": "main.js",
   "scripts": {
     "start": "electron ."
+  },
+  "dependencies": {
+    "@aivg/sat-sdk": "file:../../sdks/typescript"
   },
   "devDependencies": {
     "electron": "^31.0.0"

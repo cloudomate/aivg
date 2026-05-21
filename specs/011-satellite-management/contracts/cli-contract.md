@@ -78,6 +78,12 @@ On failure:
 `ble_provisioning_failed` · `improv_timeout` · `wifi_join_failed` ·
 `config_conflict` · `internal_error`.
 
+**Added by feature 013** (`aivg setup` — see
+[../../013-aivg-setup-cli/contracts/setup-cli-contract.md](../../013-aivg-setup-cli/contracts/setup-cli-contract.md)):
+`no_platform_detected` · `multiple_platforms_detected` ·
+`setup_not_supported_for_platform` · `setup_lock_held` ·
+`setup_partial_failure` · `permission_denied` · `host_state_drifted`.
+
 Adding new codes is a minor bump (additive). Removing or renaming is a
 major bump.
 
@@ -187,6 +193,24 @@ mapping to REST). Without `--name`, an interactive prompt collects it
 `POST /satellite/{id}/ota/apply`. With `--follow`, attach to the device's
 log stream filtered to `source=ota` and emit each progress event as an
 NDJSON envelope until terminal state (success / failed / rolled_back).
+
+### `aivg setup` / `aivg deploy` (feature 013)
+
+Platform-agnostic host install. Full surface documented in
+[../../013-aivg-setup-cli/contracts/setup-cli-contract.md](../../013-aivg-setup-cli/contracts/setup-cli-contract.md);
+flag summary:
+
+```text
+aivg setup [--platform NAME]
+           [--preflight | --uninstall | --restore-backup PATH | --parity-check]
+           [--yes] [--force] [--legacy-hermes] [--no-tune] [--phrase PHRASE]
+
+aivg deploy   # exact synonym for `aivg setup`
+```
+
+JSON-mode output is one NDJSON envelope per phase transition, then
+one terminal `done`/`failed` envelope. Each envelope reuses the same
+`{ok,data,error,v=1}` shape — no contract bump.
 
 ### `aivg ota manifest DEVICE_ID`
 

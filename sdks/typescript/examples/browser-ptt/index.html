@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>@aivg/sat-sdk · browser PTT demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+      pre { background: #f4f4f4; padding: 12px; border-radius: 4px; overflow: auto; max-height: 60vh; }
+      button { padding: 12px 24px; font-size: 16px; cursor: pointer; }
+      .row { margin: 12px 0; }
+      input { padding: 6px; min-width: 280px; }
+    </style>
+  </head>
+  <body>
+    <h1>@aivg/sat-sdk — browser PTT demo</h1>
+    <p>Adopt the device with <code>aivg device adopt &lt;id&gt;</code> first.</p>
+
+    <div class="row">
+      <label>Gateway <input id="gw" value="http://localhost:8643" /></label>
+    </div>
+    <div class="row">
+      <button id="connect">Connect</button>
+      <button id="ptt-down">▼ Hold to talk</button>
+      <button id="ptt-up">▲ Release</button>
+      <button id="disconnect">Disconnect</button>
+    </div>
+    <p>State: <strong id="state">idle</strong> · Adoption: <strong id="adoption">pending</strong></p>
+    <pre id="log"></pre>
+
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>
