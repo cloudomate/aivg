@@ -26,7 +26,7 @@ dependencies = [
     # and the varint framing helpers (``aioesphomeapi.core``) so AIVG
     # never invents an ESPHome wire format. Pinned to the range that
     # currently ships with Home Assistant + ESPHome 2024.x firmware.
-    "aioesphomeapi>=23.0,<28.0",
+    "aioesphomeapi>=45,<46",
     # Feature 017 (post-MVP, client-mode noise encryption). ESPHome
     # 2026.1+ removed the plaintext API password; modern firmware
     # speaks Noise_NNpsk0_25519_ChaChaPoly_SHA256 exclusively. These
