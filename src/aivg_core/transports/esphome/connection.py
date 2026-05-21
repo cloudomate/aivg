@@ -79,6 +79,18 @@ class EsphomeConnection:
         keystore: KeystoreResolver,
         bootstrap_key: Optional[str],
         ui_broadcast=None,
+        # Feature 017 client-mode: when ``direction="client"``, this
+        # connection is the dialer side. AIVG sent the HelloRequest
+        # outbound; the *device* listens on port 6053. The opposite
+        # direction (``direction="server"``) accepts incoming peers
+        # (e.g., OHF-Voice's linux-voice-assistant or a future
+        # Linux-side satellite). The wire protocol is symmetric
+        # post-auth; only the handshake direction differs.
+        direction: str = "server",
+        # Client mode requires the device's identity + key up-front
+        # (we KNOW which device we're dialing). Ignored in server mode.
+        device_id_override: Optional[str] = None,
+        api_key_override: Optional[str] = None,
     ) -> None:
         self._reader = reader
         self._writer = writer
@@ -88,6 +100,9 @@ class EsphomeConnection:
         self._keystore = keystore
         self._bootstrap_key = bootstrap_key
         self._ui_broadcast = ui_broadcast
+        self._direction = direction
+        self._device_id_override = device_id_override
+        self._api_key_override = api_key_override
 
         self.state = ConnState.HANDSHAKING
         self.device_id: Optional[str] = None
@@ -132,56 +147,97 @@ class EsphomeConnection:
         return await read_next_message(self._reader)
 
     async def _handshake(self) -> None:
-        """Initial Hello + (optional) DeviceInfo exchange."""
-        opcode, msg = await self._recv()
-        if not isinstance(msg, pb.HelloRequest):
-            raise FramingError(f"expected HelloRequest, got opcode {opcode}")
-        # The client_info field carries the device's identity (typically
-        # the ESPHome device's `name` config field). Use it as device_id.
-        self.device_id = (msg.client_info or "").strip() or f"unknown-{uuid.uuid4().hex[:8]}"
-        self.device_info["client_info"] = msg.client_info
-        self.device_info["api_version_major"] = msg.api_version_major
-        self.device_info["api_version_minor"] = msg.api_version_minor
-
-        await self._send(make_hello_response())
+        """Initial Hello exchange. Direction-aware: in server mode we
+        receive HelloRequest then send HelloResponse; in client mode
+        we send HelloRequest first then read the device's
+        HelloResponse."""
+        if self._direction == "client":
+            # We are dialing a device. Send HelloRequest first.
+            self.device_id = self._device_id_override or f"aivg-{uuid.uuid4().hex[:8]}"
+            await self._send(pb.HelloRequest(
+                client_info="aivg-gateway",
+                api_version_major=1,
+                api_version_minor=10,
+            ))
+            opcode, msg = await self._recv()
+            if not isinstance(msg, pb.HelloResponse):
+                raise FramingError(
+                    f"client-mode expected HelloResponse from device, got opcode {opcode}"
+                )
+            self.device_info["server_info"] = msg.server_info
+            self.device_info["api_version_major"] = msg.api_version_major
+            self.device_info["api_version_minor"] = msg.api_version_minor
+        else:
+            # Server mode: receive HelloRequest, reply HelloResponse.
+            opcode, msg = await self._recv()
+            if not isinstance(msg, pb.HelloRequest):
+                raise FramingError(f"expected HelloRequest, got opcode {opcode}")
+            # The client_info field carries the device's identity
+            # (typically the ESPHome device's `name` config field).
+            self.device_id = (msg.client_info or "").strip() or f"unknown-{uuid.uuid4().hex[:8]}"
+            self.device_info["client_info"] = msg.client_info
+            self.device_info["api_version_major"] = msg.api_version_major
+            self.device_info["api_version_minor"] = msg.api_version_minor
+            await self._send(make_hello_response())
         self.state = ConnState.AUTHING
 
     async def _authenticate(self) -> None:
-        """Process ``ConnectRequest`` (newer firmware) or
-        ``AuthenticationRequest`` (older). Compare the presented
-        password against the keystore entry."""
-        opcode, msg = await self._recv()
-        presented = ""
-        if isinstance(msg, pb.ConnectRequest):
-            presented = msg.password
-        elif isinstance(msg, pb.AuthenticationRequest):
-            presented = msg.password
-        else:
-            raise FramingError(
-                f"expected ConnectRequest/AuthenticationRequest, got opcode {opcode}"
-            )
+        """Auth phase. In server mode we receive a ConnectRequest /
+        AuthenticationRequest with the device's password and verify
+        it against our keystore. In client mode we send ConnectRequest
+        carrying the per-device api_key (which we already know — we
+        looked it up before dialing) and verify the device's
+        ConnectResponse.invalid_password is False.
 
-        expected = await self._keystore.resolve(self.device_id or "")
-        if not verify(presented, expected, bootstrap_key=self._bootstrap_key):
-            # Inform the device + close.
+        After successful auth (either direction), the device appears
+        in the registry tagged as ``transport='esphome_api'``."""
+        if self._direction == "client":
+            # We dialed the device. We KNOW the api_key for the device
+            # we picked from the dialer's config.
+            api_key = self._api_key_override or ""
+            await self._send(pb.ConnectRequest(password=api_key))
+            opcode, msg = await self._recv()
+            if not isinstance(msg, pb.ConnectResponse):
+                raise FramingError(
+                    f"client-mode expected ConnectResponse, got opcode {opcode}"
+                )
+            if msg.invalid_password:
+                self._log(
+                    LogLevel.WARN,
+                    f"esphome client-mode: auth rejected by device "
+                    f"{self.device_id!r}",
+                )
+                raise FramingError("device rejected our api_key")
+        else:
+            opcode, msg = await self._recv()
+            presented = ""
             if isinstance(msg, pb.ConnectRequest):
-                await self._send(pb.ConnectResponse(invalid_password=True))
+                presented = msg.password
+            elif isinstance(msg, pb.AuthenticationRequest):
+                presented = msg.password
             else:
-                await self._send(pb.AuthenticationResponse(invalid_password=True))
-            self._log(
-                LogLevel.INFO,
-                f"esphome: auth_failed device_id={self.device_id!r}",
-            )
-            raise FramingError("auth failed")
+                raise FramingError(
+                    f"expected ConnectRequest/AuthenticationRequest, got opcode {opcode}"
+                )
 
-        # Auth ok.
-        if isinstance(msg, pb.ConnectRequest):
-            await self._send(pb.ConnectResponse(invalid_password=False))
-        else:
-            await self._send(pb.AuthenticationResponse(invalid_password=False))
+            expected = await self._keystore.resolve(self.device_id or "")
+            if not verify(presented, expected, bootstrap_key=self._bootstrap_key):
+                if isinstance(msg, pb.ConnectRequest):
+                    await self._send(pb.ConnectResponse(invalid_password=True))
+                else:
+                    await self._send(pb.AuthenticationResponse(invalid_password=True))
+                self._log(
+                    LogLevel.INFO,
+                    f"esphome: auth_failed device_id={self.device_id!r}",
+                )
+                raise FramingError("auth failed")
+            if isinstance(msg, pb.ConnectRequest):
+                await self._send(pb.ConnectResponse(invalid_password=False))
+            else:
+                await self._send(pb.AuthenticationResponse(invalid_password=False))
 
         # Register the device with the existing AIVG registry, tagging
-        # the transport.
+        # the transport. Same step for both directions — auth succeeded.
         client = self._registry.register(
             device_id=self.device_id,  # type: ignore[arg-type]
             device_type="esphome",
@@ -192,6 +248,13 @@ class EsphomeConnection:
         client.adoption_state = AdoptionState.ADOPTED
         client.touch()
         self._log(LogLevel.INFO, f"esphome: device_adopted device_id={self.device_id!r}")
+
+        # Client mode: we MUST subscribe to voice-assistant pipelines
+        # or the device won't push wake-word events to us. In server
+        # mode, the device does this for us.
+        if self._direction == "client":
+            await self._send(pb.SubscribeVoiceAssistantRequest(subscribe=True))
+
         self.state = ConnState.READY
 
     async def _serve_voice(self) -> None:

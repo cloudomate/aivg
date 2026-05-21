@@ -58,10 +58,11 @@ class SatelliteWebRTCAdapter:
         )
         self._sites: list = []
         # Feature 017 — optional ESPHome native API transport. Off by
-        # default; opt-in via ``transports.esphome_api.enabled`` in the
-        # satellite config. Constructed lazily in :meth:`start` so
-        # a disabled deployment doesn't import the new module at all.
+        # default; opt-in via ``transports.esphome_api.enabled`` for
+        # server mode or ``transports.esphome_api.devices`` for client
+        # (dialer) mode. Constructed lazily in :meth:`start`.
         self._esphome_transport = None
+        self._esphome_dialer = None
 
     # --- Hermes platform-adapter lifecycle (VG-4 shim) -------------------
     async def start(self) -> None:  # pragma: no cover - needs aiohttp
@@ -99,30 +100,45 @@ class SatelliteWebRTCAdapter:
                 f"to avoid a half-up adapter (FR-005)."
             ) from exc
 
-        # 3) Feature 017 — optional ESPHome native API transport. Bound
-        #    to its own port (default 6053), additive to the existing
-        #    two. Disabled-by-default; opt-in via
-        #    ``transports.esphome_api.enabled``. Routes through the
-        #    same AgentPlatform via the shared ``Session`` class —
-        #    Principle IV preserved (no ``platforms/`` modifications).
-        if self.cfg.transports.esphome_api.enabled:
-            from .transports.esphome import EsphomeTransport  # noqa: WPS433 - lazy
-            from .transports.esphome.auth import KeystoreResolver  # noqa: WPS433
+        # 3) Feature 017 — optional ESPHome native API transport. Two
+        #    sub-modes (independent — both, either, or neither):
+        #      a) server mode: AIVG listens on port 6053 (linux-voice-
+        #         assistant-style satellites dial AIVG).
+        #      b) client mode: AIVG dials out to configured ESPHome
+        #         devices (the standard direction for real ESP32
+        #         firmware that listens on 6053 and advertises mDNS).
+        #    Both modes route through the same AgentPlatform via the
+        #    shared ``Session`` class — Principle IV preserved.
+        es_cfg = self.cfg.transports.esphome_api
+        if es_cfg.enabled or es_cfg.devices:
             from pathlib import Path
-
-            es_cfg = self.cfg.transports.esphome_api
+            from .transports.esphome.auth import KeystoreResolver  # noqa: WPS433
             keystore = KeystoreResolver(Path(es_cfg.api_key_file).expanduser())
-            self._esphome_transport = EsphomeTransport(
-                registry=self.registry,
-                platform=self.platform,
-                sink=self.sink,
-                host=es_cfg.host,
-                port=es_cfg.port,
-                api_key_resolver=keystore,
-                bootstrap_key=es_cfg.bootstrap_key,
-                ui_broadcast=self.management._broadcast,
-            )
-            await self._esphome_transport.start()
+
+            if es_cfg.enabled:
+                from .transports.esphome import EsphomeTransport  # noqa: WPS433
+                self._esphome_transport = EsphomeTransport(
+                    registry=self.registry,
+                    platform=self.platform,
+                    sink=self.sink,
+                    host=es_cfg.host,
+                    port=es_cfg.port,
+                    api_key_resolver=keystore,
+                    bootstrap_key=es_cfg.bootstrap_key,
+                    ui_broadcast=self.management._broadcast,
+                )
+                await self._esphome_transport.start()
+
+            if es_cfg.devices:
+                from .transports.esphome.dialer import EsphomeDeviceDialer  # noqa: WPS433
+                self._esphome_dialer = EsphomeDeviceDialer(
+                    registry=self.registry,
+                    platform=self.platform,
+                    sink=self.sink,
+                    devices=es_cfg.devices,
+                    ui_broadcast=self.management._broadcast,
+                )
+                await self._esphome_dialer.start()
 
     async def stop(self) -> None:  # pragma: no cover - needs aiohttp
         for runner in self._sites:
@@ -130,6 +146,9 @@ class SatelliteWebRTCAdapter:
         if self._esphome_transport is not None:
             await self._esphome_transport.stop()
             self._esphome_transport = None
+        if self._esphome_dialer is not None:
+            await self._esphome_dialer.stop()
+            self._esphome_dialer = None
         self._sites.clear()
 
 

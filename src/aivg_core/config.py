@@ -28,16 +28,32 @@ DEFAULT_CONFIG_PATH = Path(os.path.expanduser("~/.hermes/config.yaml"))
 
 @dataclass
 class EsphomeTransportConfig:
-    """ESPHome native API transport (feature 017)."""
+    """ESPHome native API transport (feature 017).
+
+    Two operating modes (can run simultaneously):
+
+    - **Server mode** (``enabled: true``, ``host``/``port`` define the
+      listener): AIVG listens on ``port`` for inbound connections.
+      Works for OHF-Voice's `linux-voice-assistant` and any other
+      ESPHome-API client that dials AIVG.
+
+    - **Client mode** (``devices: [...]``): AIVG dials out to each
+      configured device. Required for real ESPHome firmware devices
+      (the device IS the API server; AIVG is the client). Each entry
+      is ``{host, port, device_id, api_key}``.
+    """
     enabled: bool = False
     host: str = "0.0.0.0"
     port: int = 6053
     api_key_file: str = "~/.aivg/devices/keys.json"
-    # Optional bootstrap key: when non-empty, lets an unregistered
-    # device complete one Connect+Auth so the operator can adopt it
-    # via ``aivg device adopt``. Empty / None means only pre-registered
-    # devices may connect.
+    # Optional bootstrap key for server mode: when non-empty, lets an
+    # unregistered device complete one Connect+Auth so the operator
+    # can adopt it via ``aivg device adopt``. Empty / None means only
+    # pre-registered devices may connect.
     bootstrap_key: Optional[str] = None
+    # Client-mode device list. Each entry: {host: str, port: int (default 6053),
+    # device_id: str, api_key: str}. Empty list means client mode disabled.
+    devices: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -95,6 +111,7 @@ class SatelliteAdapterConfig:
                     "api_key_file", "~/.aivg/devices/keys.json"
                 )),
                 bootstrap_key=esphome_block.get("bootstrap_key") or None,
+                devices=list(esphome_block.get("devices") or []),
             ),
         )
         cfg = SatelliteAdapterConfig(
