@@ -6,6 +6,28 @@ plugin** is configured (v1 canonical: **Hermes**; planned: OpenClaw).
 Satellites capture audio and play it back; STT, the agent loop, TTS,
 and end-of-utterance detection live in the upstream agent platform.
 
+## Install (PyPI)
+
+```bash
+pip install aivg
+```
+
+**Supported**: Python 3.11+ on Linux x86_64/aarch64, macOS arm64/x86_64.
+
+**⚠ Install into your existing Hermes virtualenv, not a fresh venv.** The
+`aivg-satellite` entry point is only discoverable by Hermes's plugin loader
+if AIVG lives in the same venv Hermes runs from:
+
+```bash
+uv pip install --python ~/.hermes/hermes-agent/venv/bin/python aivg
+```
+
+Then add `aivg-satellite` under `plugins.enabled:` in `~/.hermes/config.yaml`
+and restart the gateway. Full setup flow: see [docs/](docs/) or run
+`aivg setup --help`.
+
+Repo: <https://github.com/cloudomate/aivg> · Changelog:
+[CHANGELOG.md](CHANGELOG.md) · License: MIT.
 
 ## Status
 
@@ -55,8 +77,19 @@ docs/                    # design notes, data-dir reference, rebrand allow-list
 ## Development
 
 ```bash
-pytest -q                 # 170+ tests; includes the rebrand lint
+# Editable install with all dev deps (pytest, ruff, black, etc.)
+pip install -e ".[dev]"
+# or with uv:
+uv pip install -e ".[dev]"
+
+# Run the suite
+pytest -q                 # 300+ tests
 ```
 
+Runtime + dev deps are declared in `pyproject.toml` under
+`[project]` and `[project.optional-dependencies]` respectively.
+(The legacy `requirements-dev.txt` was removed in feature 018 —
+single source of truth is the `pyproject.toml` extras now.)
+
 See [`specs/`](specs/) for the design history and the active feature
-(currently [012-aivg-branding](specs/012-aivg-branding/)).
+(currently [018-aivg-pypi-distribution](specs/018-aivg-pypi-distribution/)).

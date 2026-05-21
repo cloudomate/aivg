@@ -133,7 +133,7 @@ describe("ControlPlane — connect + register + heartbeat", () => {
     expect(ws.sent.length).toBeGreaterThanOrEqual(1);
     const registerMsg = JSON.parse(ws.sent[0]!) as { type: string; contract_version: string };
     expect(registerMsg.type).toBe("register");
-    expect(registerMsg.contract_version).toBe("1.0.0");
+    expect(registerMsg.contract_version).toBe("0.2.0");
     cp.stop();
   });
 

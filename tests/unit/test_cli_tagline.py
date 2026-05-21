@@ -32,19 +32,21 @@ def test_version_json_envelope():
     assert env["ok"] is True
     assert env["v"] == 1
     assert "version" in env["data"]
-    # Feature 017: additive bump 1.0.0 → 1.1.0 (new ESPHome transport
-    # is opt-in; same-major SDK compat preserved).
-    assert env["data"]["contract_version"] == "1.1.0"
+    # Feature 018 / Spec Clarification Q2: contract version reset to
+    # 0.2.0 at the first PyPI release (public-baseline boundary).
+    # Pre-PyPI history: 1.0.0 → (017) 1.1.0 → (018) reset to 0.2.0.
+    assert env["data"]["contract_version"] == "0.2.0"
 
 
-def test_contract_version_bumped_minor_for_esphome_transport():
-    """Feature 017 bumped the contract minor (1.0.0 → 1.1.0) when it
-    added the additive ESPHome native API transport. The transports
-    list MUST enumerate which wires the gateway can speak."""
+def test_contract_version_at_post_018_public_baseline():
+    """Spec 018 Clarification Q2: the wire-contract version resets to
+    0.2.0 at the first PyPI release, aligning with the package version
+    at the public-baseline boundary. The transports list MUST
+    enumerate which wires the gateway can speak."""
     res = _aivg("--json", "--contract-version")
     assert res.returncode == 0
     env = json.loads(res.stdout.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "1.1.0"
+    assert env["data"]["contract_version"] == "0.2.0"
     transports = env["data"].get("transports", [])
     assert "webrtc" in transports
     assert "esphome_api" in transports

@@ -16,8 +16,8 @@ describe("public API — required exports", () => {
     expect(typeof sdk.Satellite).toBe("function");
   });
 
-  it("exports CONTRACT_VERSION = '1.0.0' (SC-007)", () => {
-    expect(sdk.CONTRACT_VERSION).toBe("1.0.0");
+  it("exports CONTRACT_VERSION = '0.2.0' (post-018 public-baseline reset)", () => {
+    expect(sdk.CONTRACT_VERSION).toBe("0.2.0");
   });
 
   it("exports SDK_VERSION as a string", () => {

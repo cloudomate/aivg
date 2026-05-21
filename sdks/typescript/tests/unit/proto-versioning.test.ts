@@ -3,8 +3,8 @@ import { CONTRACT_VERSION, SDK_VERSION } from "../../src/proto/version";
 import { parseWsInbound, type WsInboundMessage } from "../../src/proto/ws-messages";
 
 describe("contract version", () => {
-  it("is exactly '1.0.0' — SC-007 binding gate", () => {
-    expect(CONTRACT_VERSION).toBe("1.0.0");
+  it("is exactly '0.2.0' (post-018 reset; was '1.0.0' pre-PyPI)", () => {
+    expect(CONTRACT_VERSION).toBe("0.2.0");
   });
 
   it("SDK_VERSION is a string (substituted by tsup OR fallback to 0.0.0)", () => {

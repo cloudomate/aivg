@@ -3,10 +3,33 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aivg-core"
-version = "0.3.1"
+name = "aivg"
+version = "0.2.0"
 description = "AIVG — AI Voice Gateway: agent-platform-agnostic voice-satellite management plane + CLI; Hermes is the v1 plugin (constitution v2.0.1)"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+readme = "README.md"
+authors = [
+    {name = "Cloudomate", email = "hello@cloudomate.com"},
+]
+maintainers = [
+    {name = "Cloudomate / AIVG contributors"},
+]
+keywords = ["voice", "satellite", "webrtc", "hermes", "aivg", "ai", "agent", "speech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Telephony",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "aiortc>=1.6",
     "aiohttp>=3.9",
@@ -19,7 +42,7 @@ dependencies = [
     # (to add the `satellite:` block + register `aivg-satellite` in
     # `plugins.enabled`). PyYAML is the de-facto choice and is already
     # pulled in transitively by aiortc + Hermes itself, but pinning here
-    # so a standalone `pip install aivg-core` is self-sufficient.
+    # so a standalone `pip install aivg` is self-sufficient.
     "PyYAML>=6",
     # Feature 017 — the ESPHome Voice Assistant transport reuses the
     # upstream proto-generated message types (``aioesphomeapi.api_pb2``)
@@ -46,6 +69,12 @@ dev = [
     "black>=24",
     "httpx>=0.27",
 ]
+
+[project.urls]
+Repository = "https://github.com/cloudomate/aivg"
+Issues = "https://github.com/cloudomate/aivg/issues"
+Changelog = "https://github.com/cloudomate/aivg/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/cloudomate/aivg/blob/main/README.md"
 
 [project.scripts]
 aivg = "aivg_cli.cli:app"

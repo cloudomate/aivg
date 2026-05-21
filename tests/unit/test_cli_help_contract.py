@@ -92,17 +92,18 @@ def test_global_flags_present():
         assert flag in out, f"global flag {flag!r} missing"
 
 
-def test_contract_version_minor_bump_for_esphome_transport():
-    """Feature 017 bumped the contract minor (1.0.0 → 1.1.0) to add
-    the additive ESPHome native API transport. Additive minor bumps
-    are allowed; the SDKs' same-major compatibility check passes."""
+def test_contract_version_at_post_018_public_baseline():
+    """Spec 018 Clarification Q2: the wire-contract version resets to
+    0.2.0 at the first PyPI release (public-baseline boundary).
+    Pre-PyPI history: 1.0.0 → (feature 017) 1.1.0 → (feature 018)
+    reset to 0.2.0 — explicit baseline alignment for the first publicly
+    versioned release."""
     out = _aivg("--json", "--contract-version")
     import json as _json
     env = _json.loads(out.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "1.1.0", (
-        "feature 017 minor-bumped to 1.1.0 (additive: ESPHome transport). "
-        "Same-major compat is preserved; SDKs that check major-version "
-        "still work."
+    assert env["data"]["contract_version"] == "0.2.0", (
+        "Spec 018 Clarification Q2 locks the post-PyPI contract version "
+        "at 0.2.0. Pre-018 history (1.1.0, 1.0.0) is internal only."
     )
 
 
