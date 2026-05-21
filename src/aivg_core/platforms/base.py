@@ -170,7 +170,7 @@ def _validate_agent_platform(plat: AgentPlatform) -> None:
     """Fail-fast check (feature 015 / R-4 / FR-007): the loaded plugin
     exposes every required canonical verb as a callable, plus a
     non-empty lowercase ``name``. Called from
-    :class:`SatelliteWebRTCAdapter` at startup so a misconfigured
+    :class:`AivgSatelliteAdapter` at startup so a misconfigured
     plugin can never accept a single inbound frame.
 
     Raises:

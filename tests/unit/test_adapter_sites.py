@@ -62,15 +62,24 @@ def adapter_cfg():
 
 def _make_adapter(cfg):
     from fakes import FakeHermesBridge
-    from aivg_core.adapter import SatelliteWebRTCAdapter
+    from aivg_core.adapter import AivgSatelliteAdapter
 
     async def _tf(sdp, device_id):  # unused during start()
         raise NotImplementedError
 
-    # Feature 015: SatelliteWebRTCAdapter takes a platform (the
-    # AgentPlatform Protocol) instead of a Hermes-bridge. FakeHermesBridge
-    # dual-implements both surfaces.
-    return SatelliteWebRTCAdapter(platform=FakeHermesBridge(), cfg=cfg, transport_factory=_tf)
+    # Feature 015: AivgSatelliteAdapter (renamed from SatelliteWebRTCAdapter
+    # in feature 019) takes a platform (the AgentPlatform Protocol)
+    # instead of a Hermes-bridge. FakeHermesBridge dual-implements both
+    # surfaces.
+    return AivgSatelliteAdapter(platform=FakeHermesBridge(), cfg=cfg, transport_factory=_tf)
+
+
+def test_back_compat_alias_resolves_to_canonical_class():
+    """Feature 019 R-3: the legacy SatelliteWebRTCAdapter name is preserved
+    as a back-compat alias for one release. Identity (`is`), not equality."""
+    from aivg_core.adapter import AivgSatelliteAdapter, SatelliteWebRTCAdapter
+
+    assert SatelliteWebRTCAdapter is AivgSatelliteAdapter
 
 
 async def test_build_signaling_app_exposes_webrtc_routes():

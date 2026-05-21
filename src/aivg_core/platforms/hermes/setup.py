@@ -50,6 +50,10 @@ DEFAULT_HERMES_CONFIG = Path("~/.hermes/config.yaml").expanduser()
 # preflight/install/uninstall clean it up if a previous attempt left
 # files behind so Hermes's plugin loader doesn't log import errors.
 LEGACY_PLUGIN_NAME = "satellite_webrtc"
+# Post-019 canonical plugin-registration name. Read by the plugin
+# entrypoint shim, the adapter class, get_chat_info, and the dev banner —
+# one source of truth so all four sites agree.
+CANONICAL_PLUGIN_NAME = "aivg_satellite"
 # The pip-installable package + entry-point name (declared in pyproject.toml
 # under [project.entry-points."hermes_agent.plugins"]). When this package is
 # `pip install`'d into the Hermes venv, Hermes auto-discovers it on next
