@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.3.1] — 2026-05-21 — Feature 019: internal plugin-name rename
+
+PATCH release. Renames the internal Hermes plugin registration name
+from `satellite_webrtc` to `aivg_satellite` and adds a load-time
+conflict detector that refuses to register when a pre-rebrand
+vendored `satellite_webrtc/` bundled plugin is also present.
+
+**No wire-surface change.** REST paths under `/satellite/*`,
+the `satellite:` config block, the `SATELLITE_*` env vars, the
+contract version (`1.1.0`), and the `aivg --contract-version`
+envelope are byte-identical to pre-019. The narrowed scope is
+deliberate — "satellite" is the correct domain noun for the
+resource being managed (the device IS a satellite); only the
+brand prefix and the `_webrtc` suffix on the internal name
+needed fixing (`_webrtc` became misleading the moment feature
+017 added the ESPHome transport under the same plugin).
+
+### Changed
+
+* Hermes platform-plugin registration name `satellite_webrtc` →
+  `aivg_satellite`. Gateway log lines now carry the new name
+  (`✓ aivg_satellite connected`).
+* `aivg_core.adapter.SatelliteWebRTCAdapter` class renamed to
+  `AivgSatelliteAdapter`. The old name remains importable as a
+  back-compat alias for one release (slated for removal in the
+  release after 0.3.1).
+* `get_chat_info()` `platform:` field returns `"aivg_satellite"`
+  (was `"satellite_webrtc"`). Display-only field; not a
+  persistence key.
+* `PlatformEntry` `plugin_name` field updated from
+  `"hermes_satellite_adapter"` to `"aivg_core"` (cosmetic).
+
+### Added
+
+* The post-019 plugin entry-point's `register()` detects a
+  pre-rebrand vendored `satellite-webrtc-platform` bundled plugin
+  still installed under `~/.hermes/hermes-agent/plugins/platforms/`
+  and refuses to register, with a clear multi-line error naming
+  the conflicting directory and the cleanup verb. Eliminates the
+  silent-shadow trap that consumed hours of the 2026-05-21 deploy
+  session (two plugins binding to the same management/signaling
+  ports, the bundled one silently winning, the entry-point one
+  loaded-but-inert).
+* New `CANONICAL_PLUGIN_NAME` constant in
+  `aivg_core.platforms.hermes.setup` (sibling to the existing
+  `LEGACY_PLUGIN_NAME`). Single source of truth that all four
+  renamed sites read from.
+
+### Tests
+
+* +9 new tests: `tests/unit/test_plugin_registration_name.py` (3),
+  `tests/unit/test_conflict_detector.py` (4),
+  `tests/unit/test_no_conflict_quiet_path.py` (1),
+  `tests/unit/test_adapter_sites.py` (+1 back-compat alias check).
+  Unit + contract suite: 285 → 294 passing.
+
+### Verification
+
+* Wire-surface byte-diff harness against pre-019 baseline: zero
+  diff on `contract-version.json`, `/satellite/list?state=all`
+  schema, and `/satellite/ws` register-reply schema (only
+  runtime state — timestamps + transient session state —
+  differs).
+* Live conflict-detector smoke: re-injected backup, restarted
+  gateway, observed `Failed to load plugin 'aivg-satellite': …`
+  with the directory path and `mv` cleanup verb in the message.
+  Other Hermes platforms unaffected. Cleanup + restart yields
+  clean `✓ aivg_satellite connected` boot.
+* Pre-019 client compatibility: unchanged @aivg/sat-sdk 0.1.4
+  electron-test client kept registering, adopting, and
+  voice-turning continuously across all post-019 gateway
+  restarts — no client-side change required.
+
 ## Unreleased — Feature 011 US3 + US4 + US5 (configure / OTA / commands)
 
 Closes the remaining work in feature 011: every command the CLI

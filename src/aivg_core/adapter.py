@@ -1,4 +1,4 @@
-"""``SatelliteWebRTCAdapter`` — registered like the telegram/discord adapters.
+"""``AivgSatelliteAdapter`` — registered like the telegram/discord adapters.
 
 Constitution IV: this is a platform adapter loaded BY an agent-platform's
 gateway, not a standalone daemon. Feature 015 closed the runtime side of
@@ -7,6 +7,12 @@ the AgentPlatform seam: this module imports only the platform-neutral
 the active platform via :class:`PluginRegistry`. The Hermes-specific
 registration shim against the Hermes platform-adapter base lives in
 :func:`build_platform_entry` below.
+
+Feature 019 renamed this from ``SatelliteWebRTCAdapter`` (which was
+pre-rebrand AND misleadingly suffixed ``_webrtc`` even though feature
+017 added the ESPHome transport under the same plugin). The old
+``SatelliteWebRTCAdapter`` name is preserved as a back-compat alias at
+the bottom of this module for one release.
 """
 
 from __future__ import annotations
@@ -23,12 +29,13 @@ from .platforms.base import (
     PluginRegistry,
     _validate_agent_platform,
 )
+from .platforms.hermes.setup import CANONICAL_PLUGIN_NAME
 from .registry import Registry
 from .webrtc.signaling import SignalingService, aiortc_transport_factory
 
 
-class SatelliteWebRTCAdapter:
-    name = "satellite_webrtc"
+class AivgSatelliteAdapter:
+    name = CANONICAL_PLUGIN_NAME
 
     def __init__(
         self,
@@ -95,7 +102,7 @@ class SatelliteWebRTCAdapter:
                 await r.cleanup()
             self._sites.clear()
             raise RuntimeError(
-                f"satellite_webrtc not ready: signaling site failed to bind "
+                f"{CANONICAL_PLUGIN_NAME} not ready: signaling site failed to bind "
                 f"on :{self.cfg.webrtc_port} ({exc}). Control plane torn down "
                 f"to avoid a half-up adapter (FR-005)."
             ) from exc
@@ -230,13 +237,13 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             # specific plugin class.
             from .platforms.base import PluginRegistry  # noqa: WPS433 - host-only path
             self._platform = PluginRegistry.load(self._impl_cfg_platform())
-            self._impl = SatelliteWebRTCAdapter(platform=self._platform)
+            self._impl = AivgSatelliteAdapter(platform=self._platform)
 
         def _impl_cfg_platform(self) -> str:
             """Resolve the adapter-config ``platform:`` key without
             forcing a full adapter construction. Loads the same
             ``~/.satellite/config.yaml`` block the inner
-            :class:`SatelliteWebRTCAdapter` will read again — duplicated
+            :class:`AivgSatelliteAdapter` will read again — duplicated
             once here so we can pick the platform BEFORE handing it to
             the inner ctor."""
             from .config import load_adapter_config  # noqa: WPS433
@@ -274,7 +281,7 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
 
         async def get_chat_info(self, chat_id):
             # chat_id == VoiceSession.session_id; this is a 1:1 voice "dm".
-            return {"chat_id": chat_id, "chat_type": "dm", "platform": "satellite_webrtc"}
+            return {"chat_id": chat_id, "chat_type": "dm", "platform": CANONICAL_PLUGIN_NAME}
 
         async def send(self, chat_id, content, reply_to=None, metadata=None, **kw):
             # Hermes calls send(chat_id=, content=, reply_to=, metadata=) and
@@ -292,13 +299,19 @@ def build_platform_entry():  # pragma: no cover - host-only (needs hermes pkg)
             return SendResult(success=True, message_id=None)
 
     return PlatformEntry(
-        name="satellite_webrtc",
+        name=CANONICAL_PLUGIN_NAME,
         label="Satellite WebRTC",
         adapter_factory=_SatellitePlatformAdapter,
         check_fn=_aiortc_available,
         source="plugin",
-        plugin_name="hermes_satellite_adapter",
+        plugin_name="aivg_core",
     )
+
+
+# Back-compat alias (one-release window, per spec 019 R-3 / data-model § 3).
+# External importers using ``from aivg_core.adapter import SatelliteWebRTCAdapter``
+# keep working through one release. Slated for removal in the release after 019.
+SatelliteWebRTCAdapter = AivgSatelliteAdapter
 
 
 def register(gateway=None):  # pragma: no cover - host-only

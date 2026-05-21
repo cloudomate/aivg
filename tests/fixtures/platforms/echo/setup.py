@@ -48,7 +48,7 @@ class EchoSetupCapability:
 
     Behavior: detect always reports installed (the host_root is the
     "platform" — if the test creates it, the platform is "installed");
-    install writes ``plugins/satellite_webrtc/.aivg-install-marker.json``
+    install writes ``plugins/aivg_satellite/.aivg-install-marker.json``
     + an `aivg:` config block; uninstall removes both.
     """
 
@@ -77,7 +77,7 @@ class EchoSetupCapability:
         )
 
     def preflight(self, opts: SetupOptions) -> PreflightReport:
-        plugin_target = self._st.plugins_dir / "satellite_webrtc"
+        plugin_target = self._st.plugins_dir / "aivg_satellite"
         marker = plugin_target / ".aivg-install-marker.json"
         intended: list[str] = []
         warnings: list[str] = []
@@ -133,7 +133,7 @@ class EchoSetupCapability:
 
         # Vendor.
         _phase("vendoring", "started")
-        plugin_target = self._st.plugins_dir / "satellite_webrtc"
+        plugin_target = self._st.plugins_dir / "aivg_satellite"
         plugin_target.mkdir(parents=True, exist_ok=True)
         (plugin_target / "plugin.yaml").write_text("name: satellite-webrtc\nlabel: Echo Satellite\n")
         # Marker (R-10).
@@ -198,7 +198,7 @@ class EchoSetupCapability:
 
         # Remove vendored plugin.
         _phase("uninstall_vendor", "started")
-        plugin_target = self._st.plugins_dir / "satellite_webrtc"
+        plugin_target = self._st.plugins_dir / "aivg_satellite"
         if plugin_target.exists():
             shutil.rmtree(plugin_target)
             removed.append(str(plugin_target))

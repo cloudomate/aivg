@@ -13,7 +13,7 @@ import sys
 
 
 def _build_dev_adapter():
-    from .adapter import SatelliteWebRTCAdapter
+    from .adapter import AivgSatelliteAdapter
 
     # Import the fake platform from the test package only in dev mode.
     # The ``FakeHermesBridge`` test double satisfies the AgentPlatform
@@ -22,7 +22,7 @@ def _build_dev_adapter():
     sys.path.insert(0, "tests")
     from fakes import FakeHermesBridge  # type: ignore
 
-    return SatelliteWebRTCAdapter(platform=FakeHermesBridge())
+    return AivgSatelliteAdapter(platform=FakeHermesBridge())
 
 
 async def _amain(args: argparse.Namespace) -> int:
@@ -37,7 +37,7 @@ async def _amain(args: argparse.Namespace) -> int:
     adapter.cfg.enabled = True
     await adapter.start()
     print(
-        f"[dev] satellite_webrtc adapter up — management:"
+        f"[dev] {adapter.name} adapter up — management:"
         f"{adapter.cfg.management_port} webrtc:{adapter.cfg.webrtc_port}"
     )
     try:
