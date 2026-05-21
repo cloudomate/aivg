@@ -5,6 +5,25 @@ All notable changes to `@aivg/sat-sdk` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] — 2026-05-21
+
+### Fixed
+
+- **`TypeError: Illegal invocation` on the first WebSocket open in
+  browser / Electron renderer environments.** `ControlPlane` was
+  defaulting `setTimeoutFn` / `setIntervalFn` / `clearTimeoutFn` /
+  `clearIntervalFn` to bare references of the globals
+  (`setTimeout`, `setInterval`, …). In Node those are plain
+  functions and work; in a browser/Electron renderer they are
+  methods of `window`, so the captured reference loses its `this`
+  binding. The first call (the heartbeat `setInterval` inside
+  `handleOpen`) then throws "Illegal invocation" against native
+  code that requires `this === window`. Fix: wrap each default in
+  an arrow that calls the global form inline, so the call
+  expression keeps the global context. No public API change.
+  Surfaces only in renderer environments; Node-side unit tests
+  passed throughout (the bug never had a way to fire there).
+
 ## [0.1.3] — 2026-05-20
 
 ### Added

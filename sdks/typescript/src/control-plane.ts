@@ -157,10 +157,13 @@ export class ControlPlane {
       reconnectPolicy: options.reconnectPolicy ?? DEFAULT_RECONNECT_POLICY,
       wsFactory: options.wsFactory ?? defaultWsFactory,
       now: options.now ?? (() => Date.now()),
-      setTimeoutFn: options.setTimeoutFn ?? setTimeout,
-      clearTimeoutFn: options.clearTimeoutFn ?? clearTimeout,
-      setIntervalFn: options.setIntervalFn ?? setInterval,
-      clearIntervalFn: options.clearIntervalFn ?? clearInterval,
+      // Wrap timer host functions: in a browser/Electron renderer these
+      // are window methods and lose their `this` binding when assigned
+      // as bare references — calling them then throws "Illegal invocation".
+      setTimeoutFn: options.setTimeoutFn ?? ((cb, ms) => setTimeout(cb, ms)),
+      clearTimeoutFn: options.clearTimeoutFn ?? ((h) => clearTimeout(h)),
+      setIntervalFn: options.setIntervalFn ?? ((cb, ms) => setInterval(cb, ms)),
+      clearIntervalFn: options.clearIntervalFn ?? ((h) => clearInterval(h)),
     };
   }
 
