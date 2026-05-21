@@ -103,6 +103,16 @@ class EsphomeDeviceDialer:
         while not self._stopped.is_set():
             try:
                 reader, writer = await asyncio.open_connection(host, port)
+                # ESPHome firmware (verified 2026.5.0) requires
+                # TCP_NODELAY on the client socket — without it, Nagle
+                # coalesces our batched Hello+Auth writes in ways the
+                # device firmware can't reassemble in time, and the
+                # device RSTs the connection. aioesphomeapi does the
+                # same thing on its sockets (connection.py line 446).
+                sock = writer.get_extra_info("socket")
+                if sock is not None:
+                    import socket as _sock  # noqa: WPS433
+                    sock.setsockopt(_sock.IPPROTO_TCP, _sock.TCP_NODELAY, 1)
             except (ConnectionRefusedError, OSError) as exc:
                 _LOG.info(
                     "esphome dialer: %s:%d unreachable (%s); retry in %.1fs",
@@ -114,6 +124,11 @@ class EsphomeDeviceDialer:
 
             # Connection established — reset backoff for next failure.
             backoff = _MIN_BACKOFF_S
+            # Per-device noise PSK (base64 32-byte key) — when set, the
+            # connection runs the Noise_NNpsk0 handshake before any
+            # plaintext-style ESPHome messages. Required for modern
+            # ESPHome firmware (2026.1+ removed the plaintext mode).
+            noise_psk = dev.get("noise_psk") or None
             conn = EsphomeConnection(
                 reader, writer,
                 registry=self._registry,
@@ -125,6 +140,7 @@ class EsphomeDeviceDialer:
                 direction="client",
                 device_id_override=device_id,
                 api_key_override=api_key,
+                noise_psk=noise_psk,
             )
             try:
                 await conn.run()

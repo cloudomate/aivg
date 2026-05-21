@@ -27,6 +27,14 @@ dependencies = [
     # never invents an ESPHome wire format. Pinned to the range that
     # currently ships with Home Assistant + ESPHome 2024.x firmware.
     "aioesphomeapi>=23.0,<28.0",
+    # Feature 017 (post-MVP, client-mode noise encryption). ESPHome
+    # 2026.1+ removed the plaintext API password; modern firmware
+    # speaks Noise_NNpsk0_25519_ChaChaPoly_SHA256 exclusively. These
+    # are aioesphomeapi's own crypto deps, surfaced here so AIVG can
+    # depend on them directly for the client-mode dialer's noise
+    # handshake path.
+    "noiseprotocol>=0.3,<0.4",
+    "chacha20poly1305-reuseable>=0.13,<0.14",
 ]
 
 [project.optional-dependencies]

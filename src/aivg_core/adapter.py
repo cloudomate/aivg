@@ -130,8 +130,18 @@ class SatelliteWebRTCAdapter:
                 await self._esphome_transport.start()
 
             if es_cfg.devices:
-                from .transports.esphome.dialer import EsphomeDeviceDialer  # noqa: WPS433
-                self._esphome_dialer = EsphomeDeviceDialer(
+                # Feature 017 v1.1: client-mode uses
+                # ``aioesphomeapi.APIClient`` via the library's
+                # ``ReconnectLogic`` (handles noise + framing +
+                # reconnect + version-skew). The original
+                # hand-rolled :mod:`.dialer` had a subtle noise-
+                # cipher-state drift bug against modern ESPHome
+                # firmware (2026.5.0); switching to the upstream
+                # library eliminates that whole class of issues.
+                from .transports.esphome.api_client_dialer import (  # noqa: WPS433
+                    EsphomeApiClientDialer,
+                )
+                self._esphome_dialer = EsphomeApiClientDialer(
                     registry=self.registry,
                     platform=self.platform,
                     sink=self.sink,

@@ -91,6 +91,11 @@ class EsphomeConnection:
         # (we KNOW which device we're dialing). Ignored in server mode.
         device_id_override: Optional[str] = None,
         api_key_override: Optional[str] = None,
+        # Feature 017 (post-MVP) — optional Noise encryption PSK
+        # (base64-encoded 32 bytes). When set in client mode, AIVG
+        # performs the Noise_NNpsk0 handshake before any plaintext
+        # messages. Required for modern ESPHome firmware (2026.1+).
+        noise_psk: Optional[str] = None,
     ) -> None:
         self._reader = reader
         self._writer = writer
@@ -103,6 +108,11 @@ class EsphomeConnection:
         self._direction = direction
         self._device_id_override = device_id_override
         self._api_key_override = api_key_override
+        self._noise_psk = noise_psk
+        # If noise is in use, this is the post-handshake helper
+        # (replaces _send / _recv with encrypted ops). None until
+        # _handshake completes.
+        self._noise = None
 
         self.state = ConnState.HANDSHAKING
         self.device_id: Optional[str] = None
@@ -138,12 +148,32 @@ class EsphomeConnection:
     # --- internal phases ---------------------------------------------
 
     async def _send(self, msg) -> None:
-        """Serialize + write one protobuf message to the socket."""
+        """Serialize + write one protobuf message. Uses noise
+        encryption if the handshake completed; plaintext otherwise."""
+        if self._noise is not None:
+            from .framing import PROTO_TO_OPCODE  # noqa: WPS433 - local import
+            opcode = PROTO_TO_OPCODE[type(msg)]
+            payload = msg.SerializeToString()
+            await self._noise.send_message(opcode, payload)
+            return
         self._writer.write(encode_message(msg))
         await self._writer.drain()
 
     async def _recv(self):
         """Read one protobuf message. Returns ``(opcode, message)``."""
+        if self._noise is not None:
+            from aioesphomeapi.core import MESSAGE_NUMBER_TO_PROTO  # noqa: WPS433
+            opcode, payload = await self._noise.recv_message()
+            proto_cls = (
+                MESSAGE_NUMBER_TO_PROTO[opcode]
+                if 0 <= opcode < len(MESSAGE_NUMBER_TO_PROTO)
+                else None
+            )
+            if proto_cls is None:
+                return opcode, None
+            msg = proto_cls()
+            msg.ParseFromString(payload)
+            return opcode, msg
         return await read_next_message(self._reader)
 
     async def _handshake(self) -> None:
@@ -152,13 +182,57 @@ class EsphomeConnection:
         we send HelloRequest first then read the device's
         HelloResponse."""
         if self._direction == "client":
-            # We are dialing a device. Send HelloRequest first.
+            # Feature 017 noise mode: if a PSK is configured, run the
+            # Noise_NNpsk0 handshake BEFORE any plaintext-style
+            # messages. Modern ESPHome firmware (2026.1+) speaks
+            # noise exclusively.
+            if self._noise_psk:
+                from .noise_handshake import NoiseHandshakeClient  # noqa: WPS433
+                self._noise = NoiseHandshakeClient(
+                    self._reader, self._writer, noise_psk=self._noise_psk,
+                )
+                await self._noise.handshake()
+                self.device_info["noise_server_name"] = self._noise.server_name
+            # We are dialing a device. Send HelloRequest + (immediately)
+            # the auth message. Modern ESPHome (verified against firmware
+            # 2026.5.0 + aioesphomeapi 45) drops the connection if the
+            # client sends Hello and pauses for a response — the device
+            # expects both messages in one batch to confirm liveness.
+            # Sending them back-to-back without awaiting a reply between
+            # them matches aioesphomeapi's APIConnection._connect_init.
             self.device_id = self._device_id_override or f"aivg-{uuid.uuid4().hex[:8]}"
-            await self._send(pb.HelloRequest(
+            # Batch Hello + Auth in a single TCP write — verified
+            # against ESPHome firmware 2026.5.0 (Respeaker XVF3800).
+            # The device RSTs the connection if these arrive as
+            # separate TCP packets.
+            hello_msg = pb.HelloRequest(
                 client_info="aivg-gateway",
                 api_version_major=1,
                 api_version_minor=10,
-            ))
+            )
+            auth_cls = getattr(pb, "AuthenticationRequest", None) or getattr(
+                pb, "ConnectRequest", None
+            )
+            if auth_cls is None:
+                raise FramingError(
+                    "neither AuthenticationRequest nor ConnectRequest is in "
+                    "aioesphomeapi.api_pb2 — upgrade aioesphomeapi"
+                )
+            auth_msg = auth_cls(password=self._api_key_override or "")
+            from .framing import PROTO_TO_OPCODE  # noqa: WPS433
+            if self._noise is not None:
+                # Encrypted batch via the noise helper.
+                await self._noise.send_messages([
+                    (PROTO_TO_OPCODE[pb.HelloRequest], hello_msg.SerializeToString()),
+                    (PROTO_TO_OPCODE[auth_cls], auth_msg.SerializeToString()),
+                ])
+            else:
+                # Plaintext batch: encode both, write as one buffer.
+                from .framing import encode_message  # noqa: WPS433
+                self._writer.write(encode_message(hello_msg) + encode_message(auth_msg))
+                await self._writer.drain()
+
+            # Now recv HelloResponse + AuthenticationResponse / ConnectResponse.
             opcode, msg = await self._recv()
             if not isinstance(msg, pb.HelloResponse):
                 raise FramingError(
@@ -167,6 +241,13 @@ class EsphomeConnection:
             self.device_info["server_info"] = msg.server_info
             self.device_info["api_version_major"] = msg.api_version_major
             self.device_info["api_version_minor"] = msg.api_version_minor
+            # And the auth ack (we already sent the auth request above).
+            opcode, msg = await self._recv()
+            # The response class is AuthenticationResponse in aioesphomeapi
+            # 45+, ConnectResponse in older releases. Both have
+            # ``invalid_password`` as the rejection flag.
+            if getattr(msg, "invalid_password", False):
+                raise FramingError("device rejected our credentials")
         else:
             # Server mode: receive HelloRequest, reply HelloResponse.
             opcode, msg = await self._recv()
@@ -192,22 +273,11 @@ class EsphomeConnection:
         After successful auth (either direction), the device appears
         in the registry tagged as ``transport='esphome_api'``."""
         if self._direction == "client":
-            # We dialed the device. We KNOW the api_key for the device
-            # we picked from the dialer's config.
-            api_key = self._api_key_override or ""
-            await self._send(pb.ConnectRequest(password=api_key))
-            opcode, msg = await self._recv()
-            if not isinstance(msg, pb.ConnectResponse):
-                raise FramingError(
-                    f"client-mode expected ConnectResponse, got opcode {opcode}"
-                )
-            if msg.invalid_password:
-                self._log(
-                    LogLevel.WARN,
-                    f"esphome client-mode: auth rejected by device "
-                    f"{self.device_id!r}",
-                )
-                raise FramingError("device rejected our api_key")
+            # Client-mode auth was bundled into ``_handshake()`` (the
+            # device requires Hello + Auth in one batch, then sends
+            # HelloResponse + AuthenticationResponse). Nothing to do
+            # here besides falling through to the registry step.
+            pass
         else:
             opcode, msg = await self._recv()
             presented = ""
