@@ -11,6 +11,6 @@
     "@aivg/sat-sdk": "file:../../sdks/typescript"
   },
   "devDependencies": {
-    "electron": "^31.0.0"
+    "electron": "^42.2.0"
   }
 }
