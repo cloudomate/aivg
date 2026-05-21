@@ -1,5 +1,90 @@
 # Changelog
 
+## [0.2.0] — 2026-05-21 — Feature 018: First public PyPI release
+
+This is the FIRST publicly-versioned release of AIVG on PyPI. Every
+prior version listed under "Pre-publication history" below was
+internal — never visible outside the repo. `0.2.0` is the public
+baseline; every future release evolves the version semver-cleanly
+from here.
+
+### Install
+
+```bash
+pip install aivg
+# or, into an existing Hermes venv (the canonical path):
+uv pip install --python ~/.hermes/hermes-agent/venv/bin/python aivg
+```
+
+### Added (in this PyPI release)
+
+- **PyPI distribution as `aivg`.** Replaces the old "clone the repo,
+  run `pip install -e .`" workflow with the standard Python
+  packaging path. Wheel size 149 KB, pure-Python (`py3-none-any`).
+  PyPI listing: <https://pypi.org/project/aivg/0.2.0/>.
+- **Complete `pyproject.toml` metadata** (per Spec 018 R-3):
+  `license = "MIT"`, `readme`, `authors`, `maintainers`, `keywords`,
+  twelve PyPI classifiers, and `[project.urls]` populating the PyPI
+  sidebar with Repository / Issues / Changelog / Documentation links.
+- **`LICENSE` file at repo root** (MIT, matching
+  `sdks/typescript/LICENSE`). Required by FR-009; previously absent.
+- **GitHub Actions CI release workflow** at `.github/workflows/release.yml`.
+  Triggered on `vX.Y.Z` tag push: builds via `uv build`, uploads to
+  TestPyPI via Trusted Publishing OIDC, smoke-installs in a clean
+  venv, promotes the SAME artifact bytes to real PyPI. No long-lived
+  PyPI tokens anywhere.
+- **Two new test files** in the regular pytest suite:
+  `tests/contract/test_pypi_metadata.py` (8 tests — guards every
+  required PyPI metadata field; runs in <0.5s) and
+  `tests/integration/test_install_from_built_wheel.py` (3 tests —
+  builds the wheel, installs into a throwaway venv, confirms
+  `aivg --version` works end-to-end). Test count 294 → 302.
+
+### Changed (Spec 018 Clarifications Q1, Q2, Q3)
+
+- **PyPI distribution name**: `aivg-core` (pre-PyPI placeholder)
+  → `aivg` (canonical short name; matches the CLI binary and the
+  product brand). Python module name `aivg_core` is UNCHANGED —
+  common Python pattern (`pyyaml` installs `yaml`, `beautifulsoup4`
+  installs `bs4`).
+- **Package version**: every pre-018 version (`0.1.0` → `0.3.1`)
+  treated as internal pre-publication history; first PyPI release
+  is `0.2.0` (the public baseline). Listed below.
+- **Wire-contract version** (`aivg --contract-version` JSON field):
+  `1.1.0` (pre-PyPI, set by feature 017's ESPHome bump) → `0.2.0`
+  (public baseline; matches the package version at the release
+  boundary). The two axes will naturally diverge over time
+  (package bumps every release, wire bumps only on wire-shape
+  changes); single number is the starting alignment only.
+- **`@aivg/sat-sdk` bumps to `0.2.0`** (MAJOR per 0.x semver
+  convention, coordinated with this release). The SDK's source
+  `CONTRACT_VERSION` constant is now `"0.2.0"`; consumers must
+  bump their pin from `^0.1.x` to `^0.2.0` to talk to a post-018
+  gateway. See [sdks/typescript/CHANGELOG.md](sdks/typescript/CHANGELOG.md).
+- README PyPI-rendered intro block, leading with `pip install aivg`
+  and the "install into the Hermes venv, NOT a fresh venv" gotcha
+  (caught us on 2026-05-21).
+
+### Compatibility
+
+- **`@aivg/sat-sdk@0.1.x` clients** talking to a post-018 gateway:
+  incompatible (SDK sends `"1.0.0"` in register frame; gateway
+  emits `"0.2.0"`). Bump SDK to `0.2.0`.
+- **Pre-018 ESPHome devices** flashed against the pre-018 gateway:
+  the wire format (REST paths, WS frames, config keys, env vars) is
+  byte-identical to pre-018 — only the `contract_version` envelope
+  string changed. Devices that ignore that field continue to work
+  unchanged; devices that check it need a re-flash with the new
+  string. None in production (per Spec Clarification Q2 rationale).
+
+---
+
+## Pre-publication history (internal versions; never on PyPI)
+
+Every version below this header is internal-only. The 0.3.x sequence
+was bumped during pre-publication development; we never published
+those numbers to PyPI. Public versioning starts at 0.2.0 above.
+
 ## [0.3.1] — 2026-05-21 — Feature 019: internal plugin-name rename
 
 PATCH release. Renames the internal Hermes plugin registration name

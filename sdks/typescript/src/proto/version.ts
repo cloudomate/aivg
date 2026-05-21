@@ -7,7 +7,7 @@
  *
  * Per spec SC-007: shipping the SDK MUST NOT require a contract bump.
  */
-export const CONTRACT_VERSION = "1.0.0";
+export const CONTRACT_VERSION = "0.2.0";
 
 /**
  * Package version (this SDK build). Substituted by tsup at build time via

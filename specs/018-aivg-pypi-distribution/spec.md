@@ -2,7 +2,7 @@
 
 **Feature Branch**: `018-aivg-pypi-distribution`  
 **Created**: 2026-05-21  
-**Status**: Draft (parked — pending feature 019 transport-plane rename)  
+**Status**: Draft — feature 019 has landed (post-merge `2d81078` on main); 018 is unblocked. Plan + tasks generated 2026-05-21.  
 **Input**: User description: "i want to distributre avig setup and core as a pypi package"
 
 ## Clarifications
@@ -15,7 +15,67 @@
   THEN feature 018 publishes the post-rename surface to PyPI. This
   feature is parked until 019 lands so the first PyPI release goes
   out under the final, transport-neutral names rather than re-publishing
-  to rename one release later.
+  to rename one release later. **Resolved 2026-05-21**: feature 019
+  landed on main (post-merge `2d81078`); 018 is unblocked.
+- Q: Should AIVG ship as multiple PyPI packages (e.g.,
+  `aivg-core` + `aivg-cli` + `aivg-satellite-plugin`) or a single
+  package containing every piece? → A: Single package. The four
+  pieces (`aivg_core` library, `aivg_cli` CLI binary, `aivg-satellite`
+  Hermes plugin entry point, future `aivg setup` flow) are
+  tightly coupled by version and shipped together. Splitting
+  introduces inter-package version-pinning fragility for zero
+  user-visible benefit — operators only ever install the bundle.
+  The four `HTTP 404 (AVAILABLE)` PyPI probes at plan time were
+  candidate NAMES for the single package, not four separate
+  packages.
+- Q: For the single package, use `aivg-core` (current `pyproject.toml`
+  value) or rename to `aivg` (short canonical name)? → A: **`aivg`**.
+  The product IS called AIVG (per feature 012 rebrand and the
+  constitution); the CLI binary IS `aivg`; the npm SDK uses scope
+  `@aivg/`. The `-core` suffix only earns its keep in multi-package
+  ecosystems, which the single-package decision above just ruled out.
+  Cost is one line in `pyproject.toml` (`name = "aivg-core"` → `name = "aivg"`).
+  The PyPI distribution name becomes `aivg`; the Python import name
+  `aivg_core` stays unchanged (common Python pattern — `pyyaml` →
+  `import yaml`, `beautifulsoup4` → `import bs4`). Install command
+  becomes `pip install aivg`. Wheel filename becomes
+  `aivg-X.Y.Z-py3-none-any.whl`.
+- Q: First PyPI release version? → A: **`0.2.0`**. Treat the first
+  PyPI publication as the public baseline — every pre-018 version
+  (`0.1.0` → ... → `0.3.1`) was internal, never visible outside the
+  repo. The CHANGELOG entries for those internal versions are
+  moved under an "Unreleased / pre-publication history" header;
+  the first PyPI-tagged entry is `[0.2.0] — YYYY-MM-DD — First
+  public release`. (Resolved at `0.2.0` rather than `0.1.0` to
+  align with the SDK forward-bump per the next clarification —
+  one number across every release surface.)
+- Q: Should the wire-contract version (`aivg --contract-version`
+  JSON field, currently `1.1.0` post-feature-017) also reset for
+  consistency with the package version? → A: **Yes, reset to
+  `0.2.0`**. Rationale: nothing is in production today (no
+  external dependents on the current `1.1.0` value beyond the
+  local electron-test + a handful of dev satellites); aligning
+  every release axis at the public-baseline boundary keeps the
+  mental model simple. The package version, the wire-contract
+  version, and the SDK package version all align at `0.2.0` for
+  the first PyPI release. The axes will naturally diverge over
+  time (package bumps every release, wire bumps only when the
+  wire shape changes) — single number is just the starting
+  alignment, not an ongoing constraint. Cascade: requires
+  updating the source `CONTRACT_VERSION` constant in
+  `aivg_cli/cli.py` (currently `1.1.0`) to `"0.2.0"`.
+- Q: How should `@aivg/sat-sdk` update to know the new wire
+  contract `0.2.0`? → A: **Bump SDK forward to `0.2.0`** (MAJOR
+  per 0.x semver convention; also satisfies the "one number
+  across release surfaces" intent). Source `CONTRACT_VERSION`
+  constant flipped from `"1.1.0"` to `"0.2.0"`. SDK package
+  version evolves forward (no npm-monotonicity regression);
+  electron-test's dep pin updates from `^0.1.x` to `^0.2.0`.
+  The SDK's package version (an independent npm product) and
+  the wire-contract version it speaks happen to align at
+  `0.2.0` for this release boundary, but the two axes remain
+  independent going forward. Cascade: SDK CHANGELOG entry,
+  dist rebuild, electron-test package.json + lockfile refresh.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -40,8 +100,7 @@ working.
 **Independent Test**: From a clean macOS or Linux host with Python
 3.11+ and a Hermes-agent venv at `~/.hermes/hermes-agent/venv/`:
 
-1. Run `pip install --target=... aivg-core` (or the chosen package
-   name) **without any local AIVG checkout**.
+1. Run `pip install --target=... aivg` **without any local AIVG checkout**.
 2. Confirm the `aivg` binary appears in the venv's `bin/` directory.
 3. Confirm `aivg --version` returns the standard JSON envelope with
    the contract version field.
@@ -81,7 +140,7 @@ AIVG repo or editing any AIVG source file, the story is delivered.
 
 A maintainer cutting a new AIVG release wants to validate the
 packaging end-to-end on TestPyPI (a separate index) before publishing
-to real PyPI. PyPI versions are immutable — once `0.4.0` exists on
+to real PyPI. PyPI versions are immutable — once `0.2.0` exists on
 real PyPI, that name+version is burned, even if it is then deleted.
 The TestPyPI staging step exists to catch packaging mistakes
 (missing files, broken entry points, missing `LICENSE`, etc.) where
@@ -110,11 +169,11 @@ runbook can:
    **When** the maintainer follows the documented TestPyPI upload
    step, **Then** TestPyPI accepts the upload and the artifact is
    installable in a clean venv via
-   `pip install -i https://test.pypi.org/simple/ aivg-core==X.Y.Z`.
+   `pip install -i https://test.pypi.org/simple/ aivg==X.Y.Z`.
 2. **Given** the TestPyPI install succeeded and the smoke checks
    passed, **When** the maintainer follows the promotion step,
    **Then** the SAME artifact files (not rebuilt) upload to real
-   PyPI and become installable via `pip install aivg-core==X.Y.Z`
+   PyPI and become installable via `pip install aivg==X.Y.Z`
    within 5 minutes of the upload command returning.
 3. **Given** a TestPyPI upload that triggers a smoke failure,
    **When** the maintainer reads the documented runbook,
@@ -126,7 +185,7 @@ runbook can:
 
 ### User Story 3 — Repo CI auto-publishes new tagged releases (Priority: P3)
 
-A maintainer tags a release commit (`v0.4.0`) and pushes the tag.
+A maintainer tags a release commit (e.g. `v0.2.1` after the first `v0.2.0` shipped) and pushes the tag.
 A CI workflow on the repo's hosting platform (GitHub) builds the
 sdist + wheel, uploads them to TestPyPI, runs the documented smoke
 install, and (on success) uploads the same bytes to real PyPI —
@@ -146,7 +205,7 @@ than long-lived `twine` tokens stored on a developer machine.
    of `main` (or a release branch).
 2. They push the tag.
 3. Without any further human input, the CI run completes within
-   10 minutes and `pip install aivg-core==X.Y.Z` works against
+   10 minutes and `pip install aivg==X.Y.Z` works against
    real PyPI from a clean venv.
 
 If a manual `twine upload` from a laptop is ever required for a
@@ -178,7 +237,7 @@ normal release, this story is NOT delivered.
 ### Edge Cases
 
 - **Package name unavailable on PyPI**: the chosen package name
-  (`aivg-core` by default) may already be registered by an unrelated
+  (`aivg`, locked by clarification Q2) may already be registered by an unrelated
   project. The plan phase MUST verify name availability before the
   first publish; if taken, fall back per the `assumptions` section.
 - **Maintainer reuses a version number after a failed publish**:
@@ -188,7 +247,7 @@ normal release, this story is NOT delivered.
   message rather than silently rebuilding.
 - **Conflict between an editable local install and a PyPI install**:
   a contributor on the AIVG repo may have `pip install -e .` AND
-  later run `pip install aivg-core` in the same venv. The second
+  later run `pip install aivg` in the same venv. The second
   install MUST not break the first, and the contributor SHOULD be
   warned of the conflict (pip's default behaviour is acceptable;
   no AIVG-specific shim required).
@@ -278,7 +337,7 @@ normal release, this story is NOT delivered.
   password manager) and how they are rotated.
 - **FR-013**: The `aivg setup` flow shipped in feature 013 MUST
   work end-to-end when invoked after a PyPI install — i.e., the
-  combination `pip install aivg-core && aivg setup` MUST be a
+  combination `pip install aivg && aivg setup` MUST be a
   sufficient installation path on a fresh host with Hermes
   installed, with no other manual steps required.
 - **FR-014**: The PyPI listing's README (rendered from
@@ -317,7 +376,7 @@ normal release, this story is NOT delivered.
   `pip install <aivg-package-name>` and complete the install in
   under 60 seconds on a typical broadband connection (≥ 25 Mbps).
 - **SC-002**: From `git push --tags` of an annotated release tag
-  to "`pip install aivg-core==X.Y.Z` resolves on real PyPI" is
+  to "`pip install aivg==X.Y.Z` resolves on real PyPI" is
   under 10 minutes wall-clock, on the documented (or CI-codified)
   release path.
 - **SC-003**: Across the first 5 published releases, zero versions
@@ -351,13 +410,13 @@ normal release, this story is NOT delivered.
 
 ## Assumptions
 
-- **Package name**: `aivg-core` is the default choice (matches
-  `pyproject.toml` `[project] name` today). The plan phase MUST
-  verify the name is available on PyPI before publishing; if it is
-  taken, the fallback choices in priority order are: `aivg`,
-  `aivg-satellite`, `aivg-gateway`. If a name change is required,
-  it MUST happen BEFORE the first publish (renames after publish
-  are painful for users).
+- **Package name**: `aivg` (locked by Clarification Q2 — see
+  rationale there; renames the pre-018 `aivg-core` placeholder in
+  `pyproject.toml` to the canonical short name). Verified
+  available on PyPI at plan time (HTTP 404 from
+  `https://pypi.org/pypi/aivg/json`). The Python import name
+  `aivg_core` is unchanged — common Python pattern where the
+  distribution name and module name differ.
 - **Single-wheel distribution**: AIVG ships as ONE package
   containing both `aivg_core` and `aivg_cli`. No separate
   `aivg-cli` or `aivg-satellite-plugin` wheels in v1. (Rationale:

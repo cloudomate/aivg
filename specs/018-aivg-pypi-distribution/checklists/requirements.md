@@ -32,7 +32,7 @@
 ## Notes
 
 - The spec calls out three open items that are resolved by sensible defaults in `## Assumptions` rather than by `[NEEDS CLARIFICATION]` markers:
-  - Package name (`aivg-core` default; documented fallback chain if taken)
+  - Package name (`aivg-core` placeholder in pyproject.toml; locked by Spec Clarification Q2 to canonical short name `aivg` — verified available on PyPI at plan time)
   - License (MIT, matching the TypeScript SDK)
   - Release-host platform (GitHub Actions, matching the existing `cloudomate/aivg-devices` repo location)
 - One real repo gap was identified in the spec body (FR-009): the repo lacks a top-level `LICENSE` file today; this is a binding implementation requirement, not a clarification.

@@ -33,7 +33,7 @@ from .output import (
 from .rest_client import ManagementClient, RestError
 from .stream import stream_log_entries
 
-CONTRACT_VERSION = "1.1.0"  # feature 017 — additive ESPHome transport (was "1.0.0")
+CONTRACT_VERSION = "0.2.0"  # feature 018 — reset to public-baseline at first PyPI release (was "1.1.0" pre-PyPI; before that "1.0.0")
 # The transports list is REPORTED by the gateway at runtime (it knows which
 # listeners are bound). The CLI-side fallback emits both names because the
 # enabled-state isn't queryable from the CLI without hitting the gateway;

@@ -1,0 +1,153 @@
+# Feature 018 US3 — automated PyPI release via Trusted Publishing OIDC.
+#
+# Triggered by pushing an annotated tag matching `vX.Y.Z`.
+# Pipeline: build → TestPyPI upload → smoke install → real-PyPI promote.
+# The bytes uploaded to TestPyPI are byte-identical to the bytes uploaded
+# to real PyPI (SC-008): one `uv build`, two `uv publish` calls re-uploading
+# the same `dist/` artifacts.
+#
+# Prerequisites (operator one-time setup, NOT in this workflow):
+#   - PyPI Trusted Publisher config on both pypi.org and test.pypi.org
+#     pointing at cloudomate/aivg, workflow `release.yml`, environments
+#     `pypi` and `testpypi` respectively.
+#   - GitHub Actions environments `pypi` and `testpypi` created on the
+#     repo (with deployment-protection rules if desired).
+#
+# See specs/018-aivg-pypi-distribution/quickstart.md for the manual
+# runbook equivalent (story 2 path; this file is the story 3 automation).
+
+name: Release to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tag needs full history for setuptools_scm-style fallbacks
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ">=0.4.0"
+
+      - name: Verify tag version matches pyproject.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"  # v0.2.0 → 0.2.0
+          PYPROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag version $TAG_VERSION does not match pyproject.toml version $PYPROJECT_VERSION"
+            echo "Bump pyproject.toml AND tag the same version. Aborting."
+            exit 1
+          fi
+          echo "Tag $TAG_VERSION matches pyproject.toml $PYPROJECT_VERSION"
+
+      - name: Build sdist + wheel
+        run: |
+          rm -rf dist/
+          uv build
+
+      - name: Verify wheel inventory
+        run: |
+          if unzip -l dist/aivg-*.whl | grep -qE "tests/|specs/|clients/|sdks/|deploy/|docs/|\.github/"; then
+            echo "::error::Wheel contains files that should not ship (tests/specs/etc)"
+            unzip -l dist/aivg-*.whl
+            exit 1
+          fi
+          # Size cap (SC-004): 5 MB.
+          WHEEL_SIZE=$(stat -c %s dist/aivg-*.whl)
+          if [ "$WHEEL_SIZE" -gt 5242880 ]; then
+            echo "::error::Wheel size $WHEEL_SIZE exceeds 5 MB cap (SC-004)"
+            exit 1
+          fi
+          echo "Wheel size: $WHEEL_SIZE bytes ($(echo "scale=2; $WHEEL_SIZE / 1024 / 1024" | bc) MB)"
+
+      - name: Verify entry-points declare both aivg + aivg-satellite
+        run: |
+          EP=$(unzip -p dist/aivg-*.whl aivg-*.dist-info/entry_points.txt)
+          echo "$EP"
+          echo "$EP" | grep -q "^aivg = aivg_cli.cli:app" \
+            || { echo "::error::Missing console_script 'aivg'"; exit 1; }
+          echo "$EP" | grep -q "^aivg-satellite = aivg_core.platforms.hermes.plugin_entrypoint" \
+            || { echo "::error::Missing hermes_agent.plugins entry-point 'aivg-satellite'"; exit 1; }
+
+      - name: Upload dist/ as workflow artifact (SAME bytes for both publish steps)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  publish-testpypi:
+    name: Publish to TestPyPI (staging)
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/aivg/
+    permissions:
+      id-token: write  # OIDC for Trusted Publishing
+    steps:
+      - name: Download dist/ artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Publish to TestPyPI
+        run: uv publish --publish-url https://test.pypi.org/legacy/
+
+      - name: Smoke install from TestPyPI
+        run: |
+          uv venv /tmp/smoke --python 3.11
+          # TestPyPI doesn't mirror all deps; use real PyPI as fallback index.
+          uv pip install --python /tmp/smoke/bin/python \
+            -i https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "aivg==${GITHUB_REF_NAME#v}"
+          /tmp/smoke/bin/aivg --version
+          CONTRACT=$(/tmp/smoke/bin/aivg --contract-version | python -c "import sys,json; print(json.load(sys.stdin)['data']['contract_version'])")
+          if [ "$CONTRACT" != "0.2.0" ]; then
+            echo "::error::Post-install contract_version is $CONTRACT, expected 0.2.0"
+            exit 1
+          fi
+          echo "Smoke OK: aivg installed from TestPyPI, contract_version=$CONTRACT"
+
+  publish-pypi:
+    name: Publish to real PyPI (promotion)
+    needs: publish-testpypi   # smoke MUST pass before real-PyPI upload
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/aivg/
+    permissions:
+      id-token: write  # OIDC for Trusted Publishing
+    steps:
+      - name: Download dist/ artifact (SAME bytes that went to TestPyPI)
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Publish to real PyPI
+        run: uv publish
+
+      - name: Post-release worldwide-resolve smoke
+        run: |
+          uv venv /tmp/post-release --python 3.11
+          uv pip install --python /tmp/post-release/bin/python "aivg==${GITHUB_REF_NAME#v}"
+          /tmp/post-release/bin/aivg --version
+          /tmp/post-release/bin/aivg --contract-version

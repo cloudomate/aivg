@@ -5,6 +5,31 @@ All notable changes to `@aivg/sat-sdk` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-05-21 — Feature 018 wire-contract reset
+
+MAJOR per 0.x semver. Coordinated with `aivg-core`'s first PyPI
+release: the package + wire-contract versions both reset to `0.2.0`
+at the public-baseline boundary (per `aivg-core` Spec 018
+Clarifications Q1+Q2+Q3). Anyone on `@aivg/sat-sdk` 0.1.x stays
+compatible only with pre-018 / pre-PyPI gateways.
+
+### Changed
+
+- **`CONTRACT_VERSION` constant**: `"1.0.0"` → `"0.2.0"`. The SDK
+  now sends `contract_version: "0.2.0"` in its register frame.
+  Matches the post-018 `aivg --contract-version` output exactly.
+- **Package version**: `0.1.4` → `0.2.0` (MAJOR per 0.x convention
+  because the wire contract changes). Downstream `^0.1.x` pins do
+  not resolve `0.2.0`; consumers MUST bump their pin.
+
+### Migration
+
+| You're on | Then |
+|---|---|
+| `@aivg/sat-sdk@0.1.x` against pre-018 gateway | No-op. Stay where you are. |
+| `@aivg/sat-sdk@0.1.x` against post-018 gateway | Bump to `0.2.0`. |
+| `@aivg/sat-sdk@0.2.0` against pre-018 gateway | Incompatible — gateway returns `"1.0.0"` or `"1.1.0"`, SDK sends `"0.2.0"`. Upgrade gateway to post-018 OR stay on 0.1.x. |
+
 ## [0.1.4] — 2026-05-21
 
 ### Fixed

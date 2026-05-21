@@ -88,8 +88,8 @@ def setup_command(
     legacy_hermes: bool = typer.Option(
         False, "--legacy-hermes",
         help="Apply Hermes-specific legacy tuning (feature 010 defaults). "
-        "Set automatically when invoked via the deprecated `deploy/*.sh` "
-        "wrappers.",
+        "Historical compat for the now-removed `deploy/*.sh` wrappers "
+        "that set this automatically pre-018.",
     ),
     no_tune: bool = typer.Option(
         False, "--no-tune",
