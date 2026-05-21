@@ -14,7 +14,6 @@ and end-of-utterance detection live in the upstream agent platform.
 | Voice plane (WebRTC, Opus, server-side endpointing) | Implemented (features 001/005/006/008/010) |
 | Management plane (registry, adoption, control WS, SSE logs) | Implemented (feature 011 Phases 1–4) |
 | `aivg` CLI + Hermes agent skill | Implemented (feature 011 Phase 3+4) |
-| Constitution | v2.0.1 (PATCH — branding rebrand only; Principle IV agent-platform-agnostic since v2.0.0) |
 
 ## Quickstart
 
@@ -52,12 +51,6 @@ docs/                    # design notes, data-dir reference, rebrand allow-list
 | **`~/.aivg/`** | AIVG's operator data (state, firmware manifests) |
 | **`~/.hermes/`** | the Hermes plugin's data (provider config, secrets) |
 
-## Constitution
-
-[`.specify/memory/constitution.md`](.specify/memory/constitution.md). v2.0.1.
-Five principles; **Principle IV** is the binding constraint: AIVG is
-agent-platform-agnostic via the documented `AgentPlatform` plugin seam at
-`src/aivg_core/platforms/base.py`.
 
 ## Development
 
