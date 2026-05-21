@@ -9,9 +9,42 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 DEFAULT_CONFIG_PATH = Path(os.path.expanduser("~/.hermes/config.yaml"))
+
+
+# =============================================================================
+# Feature 017 — additive transports config block.
+# =============================================================================
+#
+# The existing single voice-plane WebRTC server (port 8644) is the v1.0.0
+# transport. Feature 017 adds the ESPHome native API transport as an
+# additive, opt-in sibling — its block defaults to ``enabled: false`` so
+# pre-017 deployments don't open a new port without the operator's consent
+# (FR-003). Disabled-by-default also keeps the contract-version envelope
+# emitting ``transports: ["webrtc"]`` only, until the operator opts in.
+
+
+@dataclass
+class EsphomeTransportConfig:
+    """ESPHome native API transport (feature 017)."""
+    enabled: bool = False
+    host: str = "0.0.0.0"
+    port: int = 6053
+    api_key_file: str = "~/.aivg/devices/keys.json"
+    # Optional bootstrap key: when non-empty, lets an unregistered
+    # device complete one Connect+Auth so the operator can adopt it
+    # via ``aivg device adopt``. Empty / None means only pre-registered
+    # devices may connect.
+    bootstrap_key: Optional[str] = None
+
+
+@dataclass
+class TransportsConfig:
+    """Top-level transports block. Additive in v1.1.0; absent in
+    pre-017 configs (default-constructed)."""
+    esphome_api: EsphomeTransportConfig = field(default_factory=EsphomeTransportConfig)
 
 
 @dataclass
@@ -39,6 +72,9 @@ class SatelliteAdapterConfig:
     # (the v1 canonical plugin); set to "openclaw" (stub) or a future
     # plugin name to switch.
     platform: str = "hermes"
+    # Feature 017 — additive transports block. Default-constructed
+    # means "ESPHome transport disabled"; pre-017 configs parse fine.
+    transports: TransportsConfig = field(default_factory=TransportsConfig)
 
     @staticmethod
     def from_mapping(data: dict[str, Any] | None) -> "SatelliteAdapterConfig":
@@ -47,6 +83,20 @@ class SatelliteAdapterConfig:
         # nested inside `satellite:` — the platform selection is a
         # whole-system decision, not a satellite-block detail.
         platform = (data or {}).get("platform") or block.get("platform", "hermes")
+        # Feature 017: parse the optional transports block (additive).
+        transports_block = (block.get("transports") or {})
+        esphome_block = (transports_block.get("esphome_api") or {})
+        transports = TransportsConfig(
+            esphome_api=EsphomeTransportConfig(
+                enabled=bool(esphome_block.get("enabled", False)),
+                host=str(esphome_block.get("host", "0.0.0.0")),
+                port=int(esphome_block.get("port", 6053)),
+                api_key_file=str(esphome_block.get(
+                    "api_key_file", "~/.aivg/devices/keys.json"
+                )),
+                bootstrap_key=esphome_block.get("bootstrap_key") or None,
+            ),
+        )
         cfg = SatelliteAdapterConfig(
             enabled=bool(block.get("enabled", False)),
             management_port=int(block.get("management_port", 8643)),
@@ -57,6 +107,7 @@ class SatelliteAdapterConfig:
             auto_adopt_on_register=bool(block.get("auto_adopt_on_register", True)),
             device_limit=int(block.get("device_limit", 10)),
             platform=str(platform),
+            transports=transports,
         )
         cfg.validate()
         return cfg

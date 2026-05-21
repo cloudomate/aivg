@@ -92,13 +92,17 @@ def test_global_flags_present():
         assert flag in out, f"global flag {flag!r} missing"
 
 
-def test_contract_version_unchanged():
+def test_contract_version_minor_bump_for_esphome_transport():
+    """Feature 017 bumped the contract minor (1.0.0 → 1.1.0) to add
+    the additive ESPHome native API transport. Additive minor bumps
+    are allowed; the SDKs' same-major compatibility check passes."""
     out = _aivg("--json", "--contract-version")
     import json as _json
     env = _json.loads(out.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "1.0.0", (
-        "rebrand and US3/US4/US5 implementations MUST NOT bump the "
-        "contract version — they're additive, not breaking"
+    assert env["data"]["contract_version"] == "1.1.0", (
+        "feature 017 minor-bumped to 1.1.0 (additive: ESPHome transport). "
+        "Same-major compat is preserved; SDKs that check major-version "
+        "still work."
     )
 
 

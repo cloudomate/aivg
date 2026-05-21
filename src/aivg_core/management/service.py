@@ -225,6 +225,10 @@ class ManagementService:
                         "device_id": c.device_id,
                         "name": c.name,
                         "device_type": c.device_type,
+                        # Feature 017 — which transport carried this device's
+                        # registration. Default "webrtc" preserves back-compat
+                        # for every pre-017 device record.
+                        "transport": getattr(c, "transport", "webrtc"),
                         "adoption_state": c.adoption_state.value,
                         "status": c.status.value,
                         "last_seen": c.last_seen,
@@ -241,6 +245,10 @@ class ManagementService:
                         "device_id": p.device_id,
                         "name": None,
                         "device_type": p.device_type,
+                        # Pending devices haven't completed registration so
+                        # the transport is unknown until they do; tag as
+                        # "webrtc" by default (matches pre-017 behaviour).
+                        "transport": "webrtc",
                         "adoption_state": "pending",
                         "status": "connecting",
                         "last_seen": p.last_seen,
@@ -261,6 +269,8 @@ class ManagementService:
             "device_id": c.device_id,
             "name": c.name,
             "device_type": c.device_type,
+            # Feature 017 — transport discriminator (additive).
+            "transport": getattr(c, "transport", "webrtc"),
             "adoption_state": c.adoption_state.value,
             "status": c.status.value,
             "last_seen": c.last_seen,

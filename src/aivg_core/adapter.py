@@ -57,6 +57,11 @@ class SatelliteWebRTCAdapter:
             ui_broadcast=self.management._broadcast,
         )
         self._sites: list = []
+        # Feature 017 — optional ESPHome native API transport. Off by
+        # default; opt-in via ``transports.esphome_api.enabled`` in the
+        # satellite config. Constructed lazily in :meth:`start` so
+        # a disabled deployment doesn't import the new module at all.
+        self._esphome_transport = None
 
     # --- Hermes platform-adapter lifecycle (VG-4 shim) -------------------
     async def start(self) -> None:  # pragma: no cover - needs aiohttp
@@ -94,9 +99,37 @@ class SatelliteWebRTCAdapter:
                 f"to avoid a half-up adapter (FR-005)."
             ) from exc
 
+        # 3) Feature 017 — optional ESPHome native API transport. Bound
+        #    to its own port (default 6053), additive to the existing
+        #    two. Disabled-by-default; opt-in via
+        #    ``transports.esphome_api.enabled``. Routes through the
+        #    same AgentPlatform via the shared ``Session`` class —
+        #    Principle IV preserved (no ``platforms/`` modifications).
+        if self.cfg.transports.esphome_api.enabled:
+            from .transports.esphome import EsphomeTransport  # noqa: WPS433 - lazy
+            from .transports.esphome.auth import KeystoreResolver  # noqa: WPS433
+            from pathlib import Path
+
+            es_cfg = self.cfg.transports.esphome_api
+            keystore = KeystoreResolver(Path(es_cfg.api_key_file).expanduser())
+            self._esphome_transport = EsphomeTransport(
+                registry=self.registry,
+                platform=self.platform,
+                sink=self.sink,
+                host=es_cfg.host,
+                port=es_cfg.port,
+                api_key_resolver=keystore,
+                bootstrap_key=es_cfg.bootstrap_key,
+                ui_broadcast=self.management._broadcast,
+            )
+            await self._esphome_transport.start()
+
     async def stop(self) -> None:  # pragma: no cover - needs aiohttp
         for runner in self._sites:
             await runner.cleanup()
+        if self._esphome_transport is not None:
+            await self._esphome_transport.stop()
+            self._esphome_transport = None
         self._sites.clear()
 
 

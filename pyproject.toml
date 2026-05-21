@@ -21,6 +21,12 @@ dependencies = [
     # pulled in transitively by aiortc + Hermes itself, but pinning here
     # so a standalone `pip install aivg-core` is self-sufficient.
     "PyYAML>=6",
+    # Feature 017 — the ESPHome Voice Assistant transport reuses the
+    # upstream proto-generated message types (``aioesphomeapi.api_pb2``)
+    # and the varint framing helpers (``aioesphomeapi.core``) so AIVG
+    # never invents an ESPHome wire format. Pinned to the range that
+    # currently ships with Home Assistant + ESPHome 2024.x firmware.
+    "aioesphomeapi>=23.0,<28.0",
 ]
 
 [project.optional-dependencies]

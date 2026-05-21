@@ -33,6 +33,14 @@ class EchoAgentPlatform:
         # Configurable canned reply deltas. Tests can override via
         # ``PLATFORM.reply_deltas = [...]`` to assert assembly.
         self.reply_deltas: list[str] = []
+        # When > 0, ``endpoint()`` returns end_of_utterance=True after
+        # this many frames have been observed (regardless of byte
+        # content). Lets transport-level tests (where resampling
+        # destroys the ECHO_EOU sentinel) trigger end-of-utterance
+        # deterministically. Disabled (-1) by default; the sentinel
+        # path stays the default for sentinel-based tests.
+        self.eou_after_frames: int = -1
+        self._frame_count: int = 0
 
     async def startup(self, *, gateway_config: dict) -> None:
         return None
@@ -64,10 +72,16 @@ class EchoAgentPlatform:
         # ``spec_from_file_location`` (which strips package context and
         # would break a top-level relative import).
         from aivg_core.platforms.base import EndpointResult  # noqa: WPS433
-        return EndpointResult(
-            end_of_utterance=(frame == ECHO_EOU),
-            speech_started=(frame == ECHO_SPEECH),
+        self._frame_count += 1
+        eou = (
+            (frame == ECHO_EOU)
+            or (self.eou_after_frames > 0 and self._frame_count >= self.eou_after_frames)
         )
+        speech = frame == ECHO_SPEECH
+        if eou:
+            # Reset counter for the next utterance.
+            self._frame_count = 0
+        return EndpointResult(end_of_utterance=eou, speech_started=speech)
 
     async def shutdown(self) -> None:
         return None

@@ -73,7 +73,9 @@ def human_table_devices(rows: list[dict]) -> None:
 
     console = Console(no_color=_CTX.no_color)
     table = Table(show_header=True, header_style="bold", box=None)
-    for col in ("name", "id", "type", "status", "state", "last seen", "ota"):
+    # Feature 017 — "transport" column added (additive). Default
+    # "webrtc" for pre-017 device records.
+    for col in ("name", "id", "type", "transport", "status", "state", "last seen", "ota"):
         table.add_column(col)
     for r in rows:
         status_color = {
@@ -87,6 +89,7 @@ def human_table_devices(rows: list[dict]) -> None:
             r.get("name") or "—",
             r.get("device_id", ""),
             r.get("device_type", ""),
+            r.get("transport", "webrtc"),
             status,
             r.get("adoption_state", ""),
             _human_age(r.get("last_seen")),
