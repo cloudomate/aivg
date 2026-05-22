@@ -2,6 +2,8 @@
 #include "transport/libpeer_transport.hpp"
 
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <mutex>
 
 extern "C" {
@@ -71,9 +73,60 @@ std::string LibpeerTransport::create_offer() {
   return offer ? std::string(offer) : std::string();
 }
 
+namespace {
+// libpeer's SDP parser splits strictly on CRLF and only processes lines
+// terminated by it (peer_connection.c). Gateways that emit LF-only SDP
+// (e.g. aiortc/Python) would otherwise yield an empty remote fingerprint
+// -> DTLS-SRTP "no remote fingerprint". Normalize to CRLF + trailing CRLF.
+std::string normalize_crlf(const std::string& s) {
+  std::string out;
+  out.reserve(s.size() + 64);
+  for (std::size_t i = 0; i < s.size(); ++i) {
+    char c = s[i];
+    if (c == '\n' && (i == 0 || s[i - 1] != '\r')) out.push_back('\r');
+    out.push_back(c);
+  }
+  if (out.size() < 2 || out.compare(out.size() - 2, 2, "\r\n") != 0) out.append("\r\n");
+  return out;
+}
+
+// libpeer's parser keeps the LAST a=fingerprint line and only verifies with
+// SHA-256; gateways (aiortc) advertise sha-256/384/512, so the sha-512 line
+// would win and break cert verification. Keep only the sha-256 fingerprint.
+std::string sanitize_answer(const std::string& crlf_sdp) {
+  std::string out;
+  out.reserve(crlf_sdp.size());
+  std::size_t start = 0;
+  while (start < crlf_sdp.size()) {
+    std::size_t end = crlf_sdp.find("\r\n", start);
+    if (end == std::string::npos) end = crlf_sdp.size();
+    std::string line = crlf_sdp.substr(start, end - start);
+    bool is_fp = line.rfind("a=fingerprint:", 0) == 0;
+    bool is_sha256 = line.rfind("a=fingerprint:sha-256 ", 0) == 0;
+    if (!is_fp || is_sha256) {
+      out += line;
+      out += "\r\n";
+    }
+    start = end + 2;
+  }
+  return out;
+}
+}  // namespace
+
 bool LibpeerTransport::set_answer_and_run(const std::string& answer_sdp) {
   if (pc_ == nullptr || answer_sdp.empty()) return false;
-  peer_connection_set_remote_description(pc_, answer_sdp.c_str(), SDP_TYPE_ANSWER);
+  std::string sdp = sanitize_answer(normalize_crlf(answer_sdp));
+  if (std::getenv("AIVG_SAT_DEBUG_SDP")) {
+    std::fprintf(stderr, "===ANSWER SDP (%zu bytes, normalized)===\n", sdp.size());
+    for (std::size_t i = 0; i < sdp.size(); ++i) {
+      char c = sdp[i];
+      if (c == '\r') std::fputs("\\r", stderr);
+      else if (c == '\n') std::fputs("\\n\n", stderr);
+      else std::fputc(c, stderr);
+    }
+    std::fputs("\n===END ANSWER===\n", stderr);
+  }
+  peer_connection_set_remote_description(pc_, sdp.c_str(), SDP_TYPE_ANSWER);
   running_.store(true);
   loop_ = std::thread([this] {
     using namespace std::chrono;
