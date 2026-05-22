@@ -1,0 +1,18 @@
+# ESP-IDF component manifest for the ESP32-S3 tier (feature 020, US2).
+# Built with `idf.py` against ESP-IDF v5.x — NOT via the root CMake build.
+# Device-side firmware that consumes this component lives in the
+# cloudomate/aivg-devices repo (see sdks/cpp/HANDOFF.md).
+version: "0.1.0"
+description: "libaivg-sat — C++ WebRTC satellite-client SDK (ESP32-S3 tier)"
+url: "https://github.com/cloudomate/aivg"
+dependencies:
+  idf: ">=5.0"
+  # WebRTC transport (MIT). Pinned during integration task T021/T023.
+  # libpeer is consumed as a managed/vendored component; it pulls mbedTLS,
+  # libsrtp and Opus. Espressif's esp-adf-libs WebRTC stack is explicitly
+  # NOT used (product-locked license — see spec FR-018 / plan deviation).
+  sepfy/libpeer:
+    version: "*"
+    # git: https://github.com/sepfy/libpeer.git  # pin a tag at integration time
+  espressif/esp_websocket_client: "*"   # control-plane WS (Principle III)
+  # mbedtls / libsrtp / opus arrive transitively via libpeer + IDF built-ins.

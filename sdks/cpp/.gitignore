@@ -1,0 +1,27 @@
+# Build outputs
+build/
+build-arm64/
+out/
+cmake-build-*/
+
+# ESP-IDF
+managed_components/
+sdkconfig
+sdkconfig.old
+*.bin
+*.elf
+*.map
+
+# Objects / libs
+*.o
+*.a
+*.so
+*.dylib
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.log
+.env*

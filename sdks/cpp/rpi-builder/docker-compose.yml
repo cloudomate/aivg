@@ -1,0 +1,21 @@
+# rpi-builder — cross-build env for the libaivg-sat RPi (aarch64) artifact.
+#
+#   docker compose -f sdks/cpp/rpi-builder/docker-compose.yml up -d --build
+#   docker exec rpi-builder bash -lc 'cmake -B build-arm64 -DAIVG_SAT_BUILD_TESTS=ON && cmake --build build-arm64'
+#   # then scp build-arm64/<binary> to rpi2w02 and run vs the gateway.
+#
+# The aivg repo root is mounted at /workspace so the container sees the
+# live source tree (sdks/cpp/...). Build outputs go to build-arm64/ which
+# is gitignored.
+services:
+  rpi-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/arm64
+    image: aivg/rpi-builder:arm64
+    container_name: rpi-builder
+    volumes:
+      - ../../..:/workspace
+    working_dir: /workspace/sdks/cpp
+    command: sleep infinity
