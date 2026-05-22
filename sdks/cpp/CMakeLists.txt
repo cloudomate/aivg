@@ -133,5 +133,17 @@ if(AIVG_SAT_BUILD_TESTS)
 endif()
 
 if(AIVG_SAT_BUILD_EXAMPLES)
-  # add_subdirectory(examples/desktop_smoke)  # enabled once T036 lands
+  # The RPi reference satellite (PipeWire + openWakeWord) needs the voice
+  # plane + libpipewire-0.3. Built only when both are present.
+  if(AIVG_SAT_ENABLE_VOICE)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+      pkg_check_modules(PIPEWIRE QUIET libpipewire-0.3)
+    endif()
+    if(PIPEWIRE_FOUND)
+      add_subdirectory(examples/rpi_pipewire)
+    else()
+      message(STATUS "rpi_pipewire example skipped: libpipewire-0.3 not found")
+    endif()
+  endif()
 endif()
