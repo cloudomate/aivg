@@ -63,6 +63,18 @@ Each entry: Decision / Rationale / Alternatives considered.
 - **Signaling: we use our own REST, not libpeer's built-in `peer_signaling`.** Flow: `peer_init()` → `peer_connection_create(cfg{audio_codec=CODEC_OPUS, onaudiotrack, oniceconnectionstatechange})` → `peer_connection_create_offer()` → `POST /webrtc/offer` to the gateway → `peer_connection_set_remote_description(answer, SDP_TYPE_ANSWER)` → pump `peer_connection_loop()` in a thread → on `PEER_CONNECTION_COMPLETED`, start media (`peer_connection_send_audio` out; `onaudiotrack` in).
 - **Control plane proven live**: a from-scratch RFC6455 client (mbedTLS sha1/base64 handshake) registered against the real gateway and received `registered`(adopted)+`state_update`; heartbeat accepted.
 
+## R10 — Live on-device bring-up (rpi3b01, aarch64 trixie) + DTLS resolution
+
+Cross-built in rpi-builder, run on rpi3b01 against the live gateway (10.40.0.13). Findings, in order solved:
+
+1. **Answer SDP must be CRLF + single sha-256 fingerprint.** libpeer's parser splits strictly on `\r\n` and keeps the LAST `a=fingerprint` line while verifying sha-256; aiortc emits LF + sha-256/384/512. Fix (our transport): normalize to CRLF and strip non-sha-256 fingerprint lines.
+2. **DTLS role — THE blocker.** libpeer hardcodes the offerer to DTLS *server* (`peer_connection_create_sdp`: `SDP_TYPE_OFFER → DTLS_SRTP_ROLE_SERVER`), and its mbedTLS server rejects aiortc's ClientHello with `handshake_failure` (verified via pcap: ICE connects, aiortc sends ClientHello, libpeer replies a 15-byte Alert). **Fix: one-line libpeer patch making the offerer the DTLS *client*** (`sdks/cpp/rpi-builder/patches/0001-offerer-dtls-client.patch`). Then aiortc answers `setup:passive` (server), libpeer-client's ClientHello is accepted, and **DTLS-SRTP completes** ("Created inbound/outbound SRTP session"). mbedTLS errors decoded: `-0x6E00 = SSL_HANDSHAKE_FAILURE`, `-0x7280 = SSL_CONN_EOF`.
+3. **Outbound mic timing.** `peer_connection_send_audio` drops unless `pc->state == PEER_CONNECTION_COMPLETED`. The mic pump must gate on `peer_connection_get_state() == COMPLETED` (not the ICE-state callback, which libpeer may not deliver) so the prompt isn't burned during the handshake window. With this, instrumentation confirms the pump pulls + sends all frames (`pulled=110 sent=110`).
+
+**Verified live**: connect → adopt → offer/answer → ICE → **DTLS-SRTP** → bidirectional SRTP/Opus RTP → SDK transmits 110 Opus speech frames.
+
+**Remaining (gateway-side boundary)**: despite the SDK transmitting valid Opus and the gateway showing no SRTP/decode errors, the gateway produces **no STT/transcript** for the C++ stream, so the reply WAV is silent. Next diagnosis is gateway-side, not SDK-side: enable aiortc SRTP/RTP receive logging, confirm SRTP auth passes on our packets, and compare our RTP header/timestamp/payload-type framing against a known-good `@aivg/sat-sdk`(browser)/electron turn. The SDK + transport are proven; this is an RTP/SRTP reception-interop detail.
+
 ## Cross-cutting finding — spec correction needed (SC-004 / FR-003)
 
 The spec says the SDK mirrors "the nine documented events." The

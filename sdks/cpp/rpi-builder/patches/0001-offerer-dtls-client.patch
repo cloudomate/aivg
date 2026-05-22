@@ -1,0 +1,13 @@
+diff --git a/src/peer_connection.c b/src/peer_connection.c
+index c763e80..590c190 100644
+--- a/src/peer_connection.c
++++ b/src/peer_connection.c
+@@ -432,7 +432,7 @@ static const char* peer_connection_create_sdp(PeerConnection* pc, SdpType sdp_ty
+ 
+   switch (sdp_type) {
+     case SDP_TYPE_OFFER:
+-      role = DTLS_SRTP_ROLE_SERVER;
++      role = DTLS_SRTP_ROLE_CLIENT;
+       agent_clear_candidates(&pc->agent);
+       pc->agent.mode = AGENT_MODE_CONTROLLING;
+       break;

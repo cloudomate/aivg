@@ -46,6 +46,11 @@ class LibpeerTransport {
   void send_opus(const std::uint8_t* payload, std::size_t bytes);
 
   bool connected() const noexcept { return connected_.load(); }
+  // True once libpeer's PeerConnection reaches COMPLETED (DTLS-SRTP up).
+  // Read directly from libpeer rather than relying on the state callback,
+  // which libpeer may not deliver. peer_connection_send_audio only sends
+  // in this state, so the mic pump must gate on it.
+  bool is_completed() const noexcept;
   void stop();
 
   // C-callback trampolines (public so the static thunks can reach them).

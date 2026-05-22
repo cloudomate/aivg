@@ -2,6 +2,8 @@
 #include "voice_session.hpp"
 
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <utility>
 #include <vector>
 
@@ -33,7 +35,15 @@ bool VoiceSession::begin() {
   OfferResult ans = post_offer(signaling_base_, device_id_, offer);
   if (!ans.ok) return false;
   session_id_ = ans.session_id;
-  return transport_.set_answer_and_run(ans.sdp);
+  if (!transport_.set_answer_and_run(ans.sdp)) return false;
+  // Start the mic pump now rather than waiting for the ICE-state callback
+  // (libpeer may not deliver COMPLETED to us even when media flows). The
+  // pump's send_opus -> peer_connection_send_audio self-drops until the
+  // DTLS-SRTP handshake completes, then real audio reaches the gateway.
+  if (!active_.exchange(true)) {
+    mic_thread_ = std::thread([this] { mic_pump(); });
+  }
+  return true;
 }
 
 void VoiceSession::end() {
@@ -45,16 +55,32 @@ void VoiceSession::end() {
 
 void VoiceSession::mic_pump() {
   std::vector<std::int16_t> frame(kOpusFrameSamples);
+  const bool dbg = std::getenv("AIVG_SAT_DEBUG_SDP") != nullptr;
+  unsigned long ticks = 0, completed_ticks = 0, pulled = 0, sent = 0;
   while (active_.load()) {
-    if (mic_live_.load() && in_) {
+    ++ticks;
+    bool comp = transport_.is_completed();
+    if (comp) ++completed_ticks;
+    // Only pull + send once DTLS-SRTP is up (COMPLETED); otherwise
+    // peer_connection_send_audio drops the frame and we would burn through
+    // the input before the gateway can hear it.
+    if (mic_live_.load() && in_ && comp) {
       std::size_t got = in_(frame.data(), kOpusFrameSamples);
       if (got == kOpusFrameSamples) {
+        ++pulled;
         auto payload = opus_.encode(frame.data(), kOpusFrameSamples);
-        if (!payload.empty()) transport_.send_opus(payload.data(), payload.size());
+        if (!payload.empty()) {
+          transport_.send_opus(payload.data(), payload.size());
+          ++sent;
+        }
       }
     }
     // 20 ms cadence (one Opus frame at 48 kHz).
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  if (dbg) {
+    std::fprintf(stderr, "[mic_pump] ticks=%lu completed_ticks=%lu pulled=%lu sent=%lu\n", ticks,
+                 completed_ticks, pulled, sent);
   }
 }
 

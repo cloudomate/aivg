@@ -69,6 +69,11 @@ std::string LibpeerTransport::create_offer() {
   peer_connection_oniceconnectionstatechange(pc_, on_ice_state_thunk);
 
   // Synchronous: gathers host candidates and returns the full offer SDP.
+  // NOTE: libpeer must be patched so the offerer takes the DTLS *client*
+  // role (peer_connection_create_sdp: SDP_TYPE_OFFER -> DTLS_SRTP_ROLE_CLIENT),
+  // so it offers a=setup:active and initiates the handshake against aiortc's
+  // OpenSSL server. The default (offerer=server) makes mbedTLS-server reject
+  // aiortc's ClientHello with handshake_failure. See HANDOFF.md / research.md.
   const char* offer = peer_connection_create_offer(pc_);
   return offer ? std::string(offer) : std::string();
 }
@@ -138,8 +143,17 @@ bool LibpeerTransport::set_answer_and_run(const std::string& answer_sdp) {
   return true;
 }
 
+bool LibpeerTransport::is_completed() const noexcept {
+  return pc_ != nullptr && peer_connection_get_state(pc_) == PEER_CONNECTION_COMPLETED;
+}
+
 void LibpeerTransport::send_opus(const std::uint8_t* payload, std::size_t bytes) {
-  if (pc_ != nullptr && connected_.load() && payload != nullptr && bytes > 0) {
+  // peer_connection_send_audio() self-guards on PEER_CONNECTION_COMPLETED
+  // (returns -1 / drops before the handshake finishes), so it is safe to
+  // call as soon as the session begins — no separate connected gate, and
+  // no dependency on the ICE-state callback firing (which libpeer may not
+  // deliver for COMPLETED even when media is flowing).
+  if (pc_ != nullptr && payload != nullptr && bytes > 0) {
     peer_connection_send_audio(pc_, payload, bytes);
   }
 }
