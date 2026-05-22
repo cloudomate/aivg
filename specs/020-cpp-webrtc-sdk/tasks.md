@@ -48,14 +48,14 @@ New self-contained tree at `sdks/cpp/` (sibling of `sdks/typescript/`). Nothing 
 - [X] T009 [P] `src/proto/wire_shapes.hpp`: `SatelliteState`, `SatelliteConfig`, `LogEntry`, `OtaManifest`, `OtaProgress`, `StateChangePayload` mirroring `sdks/typescript/src/proto/` (contract 0.2.0)
 - [X] T010 Local FSM (`idle|listening|speaking|error`) + transitions in `src/state_machine.cpp` (data-model.md; note `thinking` is gateway_state, not local)
 - [X] T011 `src/platform/ws_client.hpp`: internal `WsClient` interface (control-plane abstraction, Principle III)
-- [ ] T012 `src/platform/ws_client_posix.cpp`: POSIX `WsClient` over mbedTLS (reuses libpeer's mbedTLS)
-- [ ] T013 `src/control_plane.cpp`: register, heartbeat, config-push, command, log, OTA passthrough over `WS /satellite/ws` (depends on T011, T012)
-- [ ] T014 `src/control_plane.cpp` reconnect: exponential backoff + jitter, capped (FR-015) — consumer sees only `gateway_state` transitions
-- [ ] T015 `src/transport/libpeer_transport.cpp`: libpeer PeerConnection, full ICE gather-then-offer, DTLS-SRTP (FR-012)
-- [ ] T016 `src/signaling.cpp`: `POST /webrtc/offer`, answer-shape variants, fabricate local session id (FR-011); signaling URL separate from management URL
-- [ ] T017 `src/transport/opus_bridge.cpp`: Opus encode (mic PCM16 → wire) + decode (wire → output PCM16) bridging the audio callbacks (Principle I compliant — transport codec, not STT/TTS)
-- [ ] T018 `src/voice_session.cpp`: long-lived session + mute/unmute PTT WITHOUT PeerConnection teardown (FR-010); barge-in handling
-- [ ] T019 `src/satellite.cpp`: orchestrate `connect/disconnect/beginSession/endSession/mute/unmute`, inspectors, and `SatEvent` dispatch (depends on T010–T018)
+- [X] T012 `src/platform/ws_client_posix.cpp`: POSIX `WsClient` over mbedTLS (reuses libpeer's mbedTLS)
+- [X] T013 `src/control_plane.cpp`: register, heartbeat, config-push, command, log, OTA passthrough over `WS /satellite/ws` (depends on T011, T012)
+- [X] T014 `src/control_plane.cpp` reconnect: exponential backoff + jitter, capped (FR-015) — consumer sees only `gateway_state` transitions
+- [X] T015 `src/transport/libpeer_transport.cpp`: libpeer PeerConnection, full ICE gather-then-offer, DTLS-SRTP (FR-012)
+- [X] T016 `src/signaling.cpp`: `POST /webrtc/offer`, answer-shape variants, fabricate local session id (FR-011); signaling URL separate from management URL
+- [X] T017 `src/transport/opus_bridge.cpp`: Opus encode (mic PCM16 → wire) + decode (wire → output PCM16) bridging the audio callbacks (Principle I compliant — transport codec, not STT/TTS)
+- [X] T018 `src/voice_session.cpp`: long-lived session + mute/unmute PTT WITHOUT PeerConnection teardown (FR-010); barge-in handling
+- [X] T019 `src/satellite.cpp`: orchestrate `connect/disconnect/beginSession/endSession/mute/unmute`, inspectors, and `SatEvent` dispatch (depends on T010–T018)
 - [ ] T020 Host build target in `CMakeLists.txt`: `libaivg_sat` static + shared, plus a minimal host runner used for inner-loop verification (depends on T019)
 
 **Checkpoint**: `libaivg_sat` compiles + links on host; a host turn against a live gateway is possible. User-story phases can begin.
@@ -101,7 +101,7 @@ New self-contained tree at `sdks/cpp/` (sibling of `sdks/typescript/`). Nothing 
 **Independent Test**: Gateway logs from a C++ turn and a TS turn against the same gateway diff to zero at message-type + field-name level (SC-005).
 
 - [ ] T031 [US3] Contract-version envelope read + major-version compat check + warn-not-abort on mismatch (FR-014) in `src/control_plane.cpp`
-- [ ] T032 [P] [US3] Error-code parity audit: assert the C++ `SatErrorCode` set equals `sdks/typescript/src/errors.ts` in `tests/unit/test_error_parity.cpp`
+- [X] T032 [P] [US3] Error-code parity audit: assert the C++ `SatErrorCode` set equals `sdks/typescript/src/errors.ts` in `tests/unit/test_error_parity.cpp`
 - [ ] T033 [US3] Parity harness in `tests/parity/`: drive a C++ turn + a TS turn vs the same gateway, diff gateway logs (SC-005)
 - [ ] T034 [P] [US3] Mock-gateway fixtures + deterministic error-path regress (`connection_refused`/`signaling_failed`/`ice_gathering_timeout`) in `tests/mock_gateway/` (FR-022)
 - [ ] T035 [US3] Confirm `aivg --contract-version` is unchanged (`0.2.0`) after the feature (SC-006)

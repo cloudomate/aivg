@@ -1,6 +1,7 @@
 # Build outputs
 build/
 build-arm64/
+build-voice/
 out/
 cmake-build-*/
 

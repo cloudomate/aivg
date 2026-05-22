@@ -57,6 +57,26 @@ if(AIVG_SAT_HAVE_POSIX_WS AND nlohmann_json_FOUND)
   list(APPEND AIVG_SAT_CORE_SOURCES src/control_plane.cpp)
 endif()
 
+# Voice plane (libpeer WebRTC + Opus). OFF by default because it needs a
+# built libpeer; enable with -DAIVG_SAT_ENABLE_VOICE=ON and point
+# -DAIVG_SAT_LIBPEER_ROOT=<libpeer source dir with build/src/libpeer.a>.
+# Sources are compile-verified against the real libpeer/Opus APIs; the live
+# end-to-end turn is validated on-device (RPi Zero 2 W) — see HANDOFF.md.
+option(AIVG_SAT_ENABLE_VOICE "Build the libpeer WebRTC voice plane" OFF)
+set(AIVG_SAT_LIBPEER_ROOT "" CACHE PATH "Path to a built libpeer source tree")
+if(AIVG_SAT_ENABLE_VOICE)
+  find_library(OPUS_LIB opus)
+  if(NOT (nlohmann_json_FOUND AND AIVG_SAT_HAVE_POSIX_WS AND OPUS_LIB AND AIVG_SAT_LIBPEER_ROOT))
+    message(FATAL_ERROR "AIVG_SAT_ENABLE_VOICE needs nlohmann_json, opus, the POSIX WS client, and AIVG_SAT_LIBPEER_ROOT")
+  endif()
+  list(APPEND AIVG_SAT_CORE_SOURCES
+    src/signaling.cpp
+    src/transport/opus_bridge.cpp
+    src/transport/libpeer_transport.cpp
+    src/voice_session.cpp
+    src/satellite.cpp)
+endif()
+
 add_library(aivg_sat ${AIVG_SAT_CORE_SOURCES})
 add_library(aivg::sat ALIAS aivg_sat)
 target_link_libraries(aivg_sat PUBLIC aivg_sat_headers)
@@ -66,6 +86,11 @@ if(nlohmann_json_FOUND)
 endif()
 if(AIVG_SAT_HAVE_POSIX_WS)
   target_link_libraries(aivg_sat PRIVATE ${MBEDCRYPTO_LIB} Threads::Threads)
+endif()
+if(AIVG_SAT_ENABLE_VOICE)
+  target_include_directories(aivg_sat PRIVATE ${AIVG_SAT_LIBPEER_ROOT}/include)
+  target_link_libraries(aivg_sat PRIVATE
+    ${AIVG_SAT_LIBPEER_ROOT}/build/src/libpeer.a ${OPUS_LIB} ${MBEDCRYPTO_LIB})
 endif()
 
 # --- Dependencies (enabled as integration tasks T012-T020 land) --------------
