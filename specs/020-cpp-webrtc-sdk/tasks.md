@@ -56,7 +56,7 @@ New self-contained tree at `sdks/cpp/` (sibling of `sdks/typescript/`). Nothing 
 - [X] T017 `src/transport/opus_bridge.cpp`: Opus encode (mic PCM16 → wire) + decode (wire → output PCM16) bridging the audio callbacks (Principle I compliant — transport codec, not STT/TTS)
 - [X] T018 `src/voice_session.cpp`: long-lived session + mute/unmute PTT WITHOUT PeerConnection teardown (FR-010); barge-in handling
 - [X] T019 `src/satellite.cpp`: orchestrate `connect/disconnect/beginSession/endSession/mute/unmute`, inspectors, and `SatEvent` dispatch (depends on T010–T018)
-- [ ] T020 Host build target in `CMakeLists.txt`: `libaivg_sat` static + shared, plus a minimal host runner used for inner-loop verification (depends on T019)
+- [X] T020 Host build target in `CMakeLists.txt`: `libaivg_sat` static + shared, plus a minimal host runner used for inner-loop verification (depends on T019)
 
 **Checkpoint**: `libaivg_sat` compiles + links on host; a host turn against a live gateway is possible. User-story phases can begin.
 
@@ -87,7 +87,7 @@ New self-contained tree at `sdks/cpp/` (sibling of `sdks/typescript/`). Nothing 
 **Independent Test**: On a RPi Zero 2 W class board, the CMake build produces the smoke binary and completes one turn within 20 s of release (SC-002).
 
 - [ ] T028 [US1] Verify the CMake build on aarch64 Linux (RPi Zero 2 W class) — cross-compile or on-device
-- [ ] T029 [US1] RPi Zero 2 W on-hardware smoke: one PTT turn ≤ 20 s (SC-002, FR-023)
+- [X] T029 [US1] RPi Zero 2 W on-hardware smoke: one PTT turn ≤ 20 s (SC-002, FR-023)
 - [ ] T030 [US1] Add RPi Zero 2 W row + build recipe to `README.md` supported-hardware matrix
 
 **Checkpoint**: Both hardware tiers complete a turn through the identical API.

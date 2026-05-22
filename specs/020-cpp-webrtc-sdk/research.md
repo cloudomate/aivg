@@ -80,7 +80,13 @@ Cross-built in rpi-builder, run on rpi3b01 against the live gateway (10.40.0.13)
 - Added trailing silence to the smoke (a real client streams continuously so the server-side VAD can endpoint) — confirmed via the `peak=1` tail.
 - **Root cause of "no reply" is the gateway host, not the SDK:** the STT backend (wyoming-whisper, port 10300) is **down/Connection-refused**, no device produces a transcript, and the agent LLM (llama.cpp:8080) times out (`ReadTimeout elapsed=1800s`). This blocks any client equally (browser/TS included).
 
-**Conclusion:** the C++ SDK fulfils its entire contract — register → adopt → WebRTC offer/answer → ICE → DTLS-SRTP → bidirectional Opus → delivers clean decoded speech to the gateway (verified at the gateway's receive boundary). Per Constitution Principle I, STT/agent/TTS are the gateway's responsibility; the spoken-reply step is gated on the host's STT service being restored, not on any SDK work. The two interop fixes that made this possible: the libpeer offerer=DTLS-client patch, and CRLF+sha-256 answer-SDP normalization.
+**FULL TURN ACHIEVED (2026-05-22).** The "no reply" was purely **latency**, not a broken pipeline. STT is in-process faster-whisper (`stt: provider: local, model: base`) and the server VAD endpoints after `silence_duration: 1.2s`; the original smoke gave up at a 30s deadline and tore the session down before the slow STT + agent + TTS finished. Fixes to the smoke: stream **continuous silence** (a real client never stops, keeping the session alive + letting the VAD endpoint) and wait up to **75s** for a *loud* (peak>300) reply.
+
+Result on rpi3b01 against the live gateway:
+- `[reply] peak=22061` — **real TTS audio**; `reply.wav` rms=1177 peak=22061 (49.68s incl. trailing silence).
+- gateway: `turn latency total_ms=32815.7 dominant: agent complete: TRUE` — a **complete** turn; the agent/model dominates (~33s).
+
+**The full chain works end-to-end on real aarch64 hardware:** rpi3b01 (C++ SDK) → WebRTC offer/answer → ICE → DTLS-SRTP → Opus → gateway → whisper STT → agent → TTS → Opus → SDK decode → reply WAV with real speech. SC-001 / T020 met. The enabling fixes: libpeer offerer=DTLS-client patch; CRLF + sha-256 answer-SDP normalization; mic-pump gated on `COMPLETED`; continuous-silence streaming + patient reply window for the slow server pipeline.
 
 ## Cross-cutting finding — spec correction needed (SC-004 / FR-003)
 

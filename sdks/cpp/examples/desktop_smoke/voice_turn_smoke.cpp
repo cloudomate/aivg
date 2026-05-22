@@ -95,20 +95,30 @@ int main(int argc, char** argv) {
       read_pos.store(pos + n);
       return n;
     }
-    // Stream trailing silence (~3s) after the prompt so the gateway's VAD
-    // sees the speech->silence transition and endpoints the utterance — a
-    // real client streams continuously, it doesn't just stop.
-    if (silence_frames.fetch_add(1) < 150) {
-      std::memset(buf, 0, frames * 2);
-      return frames;
-    }
-    return 0;
+    // Stream silence continuously after the prompt: a real client never
+    // stops streaming. This lets the gateway VAD endpoint the utterance AND
+    // keeps the session alive while the (slow) server-side STT + model + TTS
+    // produce a reply — which can take 30s+ on this host.
+    silence_frames.fetch_add(1);
+    std::memset(buf, 0, frames * 2);
+    return frames;
   };
-  // Speaker: collect reply audio.
+  // Speaker: collect reply audio + track peak (the gateway streams silent
+  // comfort frames between turns, so size grows constantly; only amplitude
+  // distinguishes a real TTS reply).
+  std::atomic<int> reply_peak{0};
+  std::atomic<std::size_t> real_audio_at{0};  // reply.size() when last loud frame seen
   opts.audio_output = [&](const std::int16_t* buf, std::size_t frames) {
+    int pk = 0;
+    for (std::size_t i = 0; i < frames; ++i) {
+      int a = buf[i] < 0 ? -buf[i] : buf[i];
+      if (a > pk) pk = a;
+    }
     std::lock_guard<std::mutex> lk(reply_mu);
     reply.insert(reply.end(), buf, buf + frames);
     got_reply.store(true);
+    if (pk > reply_peak.load()) reply_peak.store(pk);
+    if (pk > 300) real_audio_at.store(reply.size());  // a real (non-silent) frame
   };
   opts.on_event = [&](const aivg::sat::SatEvent& ev) {
     if (auto* t = std::get_if<aivg::sat::TranscriptDelta>(&ev))
@@ -129,18 +139,25 @@ int main(int argc, char** argv) {
   std::printf("[beginSession]\n");
   sat.beginSession().get();
 
-  // Wait for the turn: reply audio to start, then settle (no new audio for 1.5s).
-  auto deadline = std::chrono::steady_clock::now() + 30s;
-  std::size_t last = 0;
-  auto last_grow = std::chrono::steady_clock::now();
+  // Wait patiently: server-side STT (~10-15s) + model (~15s) + TTS means a
+  // real reply can land 30-40s+ after the utterance. Key on AMPLITUDE, not
+  // buffer size (comfort silence grows the buffer constantly). Settle ~2.5s
+  // after the last loud frame; otherwise wait up to 75s.
+  auto deadline = std::chrono::steady_clock::now() + 75s;
+  std::size_t last_real = 0;
+  auto last_real_t = std::chrono::steady_clock::now();
   while (std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(200ms);
-    std::size_t cur;
-    { std::lock_guard<std::mutex> lk(reply_mu); cur = reply.size(); }
-    if (cur != last) { last = cur; last_grow = std::chrono::steady_clock::now(); }
-    else if (got_reply.load() &&
-             std::chrono::steady_clock::now() - last_grow > 1500ms) break;
+    std::this_thread::sleep_for(250ms);
+    std::size_t cur_real = real_audio_at.load();
+    if (cur_real != last_real) {
+      last_real = cur_real;
+      last_real_t = std::chrono::steady_clock::now();
+    } else if (last_real > 0 &&
+               std::chrono::steady_clock::now() - last_real_t > 2500ms) {
+      break;  // a real reply arrived and has now settled
+    }
   }
+  std::printf("[reply] peak=%d (>300 ⇒ real TTS, ~0 ⇒ silence)\n", reply_peak.load());
 
   sat.endSession().get();
   sat.disconnect().get();
