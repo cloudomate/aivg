@@ -73,7 +73,14 @@ Cross-built in rpi-builder, run on rpi3b01 against the live gateway (10.40.0.13)
 
 **Verified live**: connect → adopt → offer/answer → ICE → **DTLS-SRTP** → bidirectional SRTP/Opus RTP → SDK transmits 110 Opus speech frames.
 
-**Remaining (gateway-side boundary)**: despite the SDK transmitting valid Opus and the gateway showing no SRTP/decode errors, the gateway produces **no STT/transcript** for the C++ stream, so the reply WAV is silent. Next diagnosis is gateway-side, not SDK-side: enable aiortc SRTP/RTP receive logging, confirm SRTP auth passes on our packets, and compare our RTP header/timestamp/payload-type framing against a known-good `@aivg/sat-sdk`(browser)/electron turn. The SDK + transport are proven; this is an RTP/SRTP reception-interop detail.
+**Resolved — SDK fully vindicated (gateway-side instrumentation, 2026-05-22):**
+
+- Outbound RTP decoded straight from the wire (SRTP leaves the RTP header in cleartext): **PT 111, timestamps +960/frame, monotonic seq, SSRC 6, variable payload sizes** — textbook-correct Opus. RTP framing is NOT the issue.
+- Temporarily instrumented the gateway's `AiortcTransport.receive()` (venv copy; reverted after): it logged **`DBG inbound frame` with `samples=960 rate=48000` and `peak=16074 / 21376`** for the speech frames, then `peak=1` for our trailing silence. So aiortc **receives, SRTP-decrypts, depacketizes, and Opus-decodes our audio into clean PCM** — a perfect speech→silence utterance at the gateway's own boundary.
+- Added trailing silence to the smoke (a real client streams continuously so the server-side VAD can endpoint) — confirmed via the `peak=1` tail.
+- **Root cause of "no reply" is the gateway host, not the SDK:** the STT backend (wyoming-whisper, port 10300) is **down/Connection-refused**, no device produces a transcript, and the agent LLM (llama.cpp:8080) times out (`ReadTimeout elapsed=1800s`). This blocks any client equally (browser/TS included).
+
+**Conclusion:** the C++ SDK fulfils its entire contract — register → adopt → WebRTC offer/answer → ICE → DTLS-SRTP → bidirectional Opus → delivers clean decoded speech to the gateway (verified at the gateway's receive boundary). Per Constitution Principle I, STT/agent/TTS are the gateway's responsibility; the spoken-reply step is gated on the host's STT service being restored, not on any SDK work. The two interop fixes that made this possible: the libpeer offerer=DTLS-client patch, and CRLF+sha-256 answer-SDP normalization.
 
 ## Cross-cutting finding — spec correction needed (SC-004 / FR-003)
 

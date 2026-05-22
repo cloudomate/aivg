@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
               prompt.size() / 48000.0);
 
   std::atomic<std::size_t> read_pos{0};
+  std::atomic<std::size_t> silence_frames{0};
   std::vector<std::int16_t> reply;
   std::mutex reply_mu;
   std::atomic<bool> got_reply{false};
@@ -88,11 +89,20 @@ int main(int argc, char** argv) {
   // Mic: feed the WAV out in 20 ms frames, then silence (return 0 -> end).
   opts.audio_input = [&](std::int16_t* buf, std::size_t frames) -> std::size_t {
     std::size_t pos = read_pos.load();
-    if (pos >= prompt.size()) return 0;
-    std::size_t n = std::min(frames, prompt.size() - pos);
-    std::memcpy(buf, prompt.data() + pos, n * 2);
-    read_pos.store(pos + n);
-    return n;
+    if (pos < prompt.size()) {
+      std::size_t n = std::min(frames, prompt.size() - pos);
+      std::memcpy(buf, prompt.data() + pos, n * 2);
+      read_pos.store(pos + n);
+      return n;
+    }
+    // Stream trailing silence (~3s) after the prompt so the gateway's VAD
+    // sees the speech->silence transition and endpoints the utterance — a
+    // real client streams continuously, it doesn't just stop.
+    if (silence_frames.fetch_add(1) < 150) {
+      std::memset(buf, 0, frames * 2);
+      return frames;
+    }
+    return 0;
   };
   // Speaker: collect reply audio.
   opts.audio_output = [&](const std::int16_t* buf, std::size_t frames) {
