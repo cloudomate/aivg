@@ -1,11 +1,40 @@
 cmake_minimum_required(VERSION 3.20)
-project(aivg_sat LANGUAGES CXX VERSION 0.1.0)
 
 # libaivg-sat — C++17 WebRTC satellite-client SDK (feature 020).
 # One source tree, two build profiles behind one public API:
-#   - POSIX tier (Linux/macOS/RPi Zero 2 W) — this CMake build.
-#   - ESP32-S3 tier (ESP-IDF) — see idf_component.yml; NOT built here.
+#   - POSIX tier (Linux/macOS/RPi Zero 2 W) — the project() build below.
+#   - ESP32-S3 tier (ESP-IDF) — the ESP_PLATFORM branch (feature 005).
 # Transport: libpeer (MIT). The gateway/wire contract (0.2.0) is unchanged.
+
+# --- ESP32-S3 tier: register as an ESP-IDF component and stop ----------------
+# When ESP-IDF's CMake processes this directory as a component, ESP_PLATFORM is
+# defined. We register the ESP source set (esp_websocket_client WS client +
+# control + voice planes) and return before the POSIX project() setup.
+# Consumed by device firmware (aivg-devices/devices/respeaker-xvf3800-esp32s3)
+# via a path dependency in its idf_component.yml.
+if(ESP_PLATFORM)
+  idf_component_register(
+    SRCS
+      src/state_machine.cpp
+      src/reconnect.cpp
+      src/proto/messages.cpp
+      src/control_plane.cpp
+      src/platform/ws_client_espidf.cpp
+      src/signaling.cpp
+      src/transport/opus_bridge.cpp
+      src/transport/libpeer_transport.cpp
+      src/voice_session.cpp
+      src/satellite.cpp
+    INCLUDE_DIRS include
+    PRIV_INCLUDE_DIRS src third_party
+    REQUIRES esp_websocket_client
+    PRIV_REQUIRES libpeer opus)
+  target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
+  target_compile_definitions(${COMPONENT_LIB} PRIVATE AIVG_SAT_ENABLE_VOICE=1)
+  return()
+endif()
+
+project(aivg_sat LANGUAGES CXX VERSION 0.1.0)
 
 option(AIVG_SAT_BUILD_EXAMPLES "Build the reference smoke samples" OFF)
 option(AIVG_SAT_BUILD_TESTS "Build unit/compile-check tests" OFF)

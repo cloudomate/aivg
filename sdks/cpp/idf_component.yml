@@ -7,12 +7,13 @@ description: "libaivg-sat — C++ WebRTC satellite-client SDK (ESP32-S3 tier)"
 url: "https://github.com/cloudomate/aivg"
 dependencies:
   idf: ">=5.0"
-  # WebRTC transport (MIT). Pinned during integration task T021/T023.
-  # libpeer is consumed as a managed/vendored component; it pulls mbedTLS,
-  # libsrtp and Opus. Espressif's esp-adf-libs WebRTC stack is explicitly
-  # NOT used (product-locked license — see spec FR-018 / plan deviation).
-  sepfy/libpeer:
-    version: "*"
-    # git: https://github.com/sepfy/libpeer.git  # pin a tag at integration time
+  # WebRTC transport (MIT). The registry releases (0.0.2/0.0.3) predate the
+  # current API the SDK targets, so the consuming firmware vendors libpeer
+  # *master* locally (+ the offerer→DTLS-client patch) as a component named
+  # `libpeer` — see aivg-devices/devices/respeaker-xvf3800-esp32s3. We therefore
+  # do NOT declare sepfy/libpeer here; the SDK only PRIV_REQUIRES `libpeer`.
+  # esp-adf-libs WebRTC is explicitly NOT used (product-locked license).
   espressif/esp_websocket_client: "*"   # control-plane WS (Principle III)
+  # nlohmann/json: vendored single header at third_party/nlohmann/json.hpp
+  # (no maintained IDF-registry component); added to the ESP component includes.
   # mbedtls / libsrtp / opus arrive transitively via libpeer + IDF built-ins.
