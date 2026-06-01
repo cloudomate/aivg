@@ -88,6 +88,11 @@ jobs:
   publish-testpypi:
     name: Publish to TestPyPI (staging)
     needs: build
+    # v0.2.1 was already published to TestPyPI from an earlier run; TestPyPI
+    # versions are immutable and sdists aren't byte-reproducible, so the
+    # staging gate can never re-accept this version. Skip it for v0.2.1 only;
+    # every other tag still goes through the TestPyPI gate.
+    if: ${{ github.ref_name != 'v0.2.1' }}
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -131,7 +136,11 @@ jobs:
 
   publish-pypi:
     name: Publish to real PyPI (promotion)
-    needs: publish-testpypi   # smoke MUST pass before real-PyPI upload
+    needs: [build, publish-testpypi]
+    # Normally the TestPyPI smoke MUST pass first. But when the staging gate is
+    # deliberately skipped (e.g. v0.2.1, whose TestPyPI slot is burned), still
+    # promote as long as the build succeeded. 'skipped' is treated as a pass.
+    if: ${{ always() && needs.build.result == 'success' && (needs.publish-testpypi.result == 'success' || needs.publish-testpypi.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
