@@ -42,10 +42,8 @@ SUPPORTED_TRANSPORTS = ["webrtc", "esphome_api"]
 
 app = typer.Typer(
     name="aivg",
-    help="AIVG (AI Voice Gateway) — platform-neutral satellite "
-    "management CLI (constitution v2.0.1 Principle IV). Speaks the App. A "
-    "REST surface; ships per-agent-platform skills alongside (Hermes v1; "
-    "OpenClaw planned).",
+    help="AIVG (AI Voice Gateway) — manage voice satellites and fleets "
+    "from the command line.",
     add_completion=False,
     # invoke_without_command lets --version / --contract-version fire from
     # the root callback without Typer's "missing command" rejection.

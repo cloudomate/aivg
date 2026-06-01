@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aivg"
-version = "0.2.0"
-description = "AIVG — AI Voice Gateway: agent-platform-agnostic voice-satellite management plane + CLI; Hermes is the v1 plugin (constitution v2.0.1)"
+version = "0.2.1"
+description = "AIVG — AI Voice Gateway: agent-platform-agnostic voice-satellite management plane + CLI"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 readme = "README.md"

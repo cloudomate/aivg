@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.1] — 2026-06-01 — Bug fixes
+
+Patch release on top of the `0.2.0` PyPI baseline.
+
+### Fixed
+
+- **`aivg setup` PyPI bootstrap.** `PIP_PACKAGE_NAME` is now `aivg`
+  (matching the actual PyPI distribution, not `aivg-core`);
+  `_find_repo_root` anchors on `name = "aivg"`; and when no local
+  source tree is found it falls back to `pip install aivg`, so
+  `pip install aivg && aivg setup` bootstraps end-to-end.
+- **`aivg logs <id>` markup crash.** Rich markup in
+  `source`/`device_id`/`message` is now escaped, so log lines
+  containing `[/]` or `[bold]` no longer raise `MarkupError`.
+- **`/satellite/{id}/logs` tail query.** `LogSink.query` accepts
+  `tail`; the snapshot handler whitelists/coerces query params (drops
+  unknown ones, parses `since`/`tail` numerically) and scopes by the
+  path `{id}` as `device_id`.
+
+### Changed
+
+- **`aivg list --state` help text** clarifies that `pending` only
+  populates with `auto_adopt_on_register: false` (or after a factory
+  reset), so default deployments don't surprise operators with empty
+  results.
+- **Root CLI help text** shortened to a plain one-liner ("manage voice
+  satellites and fleets from the command line").
+
 ## [0.2.0] — 2026-05-21 — Feature 018: First public PyPI release
 
 This is the FIRST publicly-versioned release of AIVG on PyPI. Every
