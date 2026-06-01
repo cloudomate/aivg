@@ -58,7 +58,7 @@ CANONICAL_PLUGIN_NAME = "aivg_satellite"
 # under [project.entry-points."hermes_agent.plugins"]). When this package is
 # `pip install`'d into the Hermes venv, Hermes auto-discovers it on next
 # startup and calls `register(ctx)` on `aivg_core.platforms.hermes.plugin_entrypoint`.
-PIP_PACKAGE_NAME = "aivg-core"
+PIP_PACKAGE_NAME = "aivg"
 HERMES_ENTRY_POINT_NAME = "aivg-satellite"
 SENTINEL_COMMENT = "# managed by aivg setup"
 
@@ -324,44 +324,46 @@ class HermesSetupCapability:
         return ""
 
     def _find_repo_root(self) -> Optional[Path]:
-        """Walk up from this file looking for ``pyproject.toml``. Returns
-        the directory containing it, or None if running from an installed
-        package (no source tree to install from).
+        """Walk up from this file looking for our ``pyproject.toml``.
+        Returns the directory containing it, or None if running from an
+        installed package (no source tree to install from — fall back to
+        PyPI).
         """
+        # Match on the unambiguous `name = "aivg"` line rather than the
+        # bare substring "aivg" (which appears in unrelated parent
+        # pyproject.tomls). Accept single- or double-quoted form.
+        anchors = ('name = "aivg"', "name = 'aivg'")
         for parent in Path(__file__).resolve().parents:
-            if (parent / "pyproject.toml").is_file():
-                # Sanity-check: it's *our* pyproject (avoid picking up a
-                # parent project's by accident).
-                try:
-                    if PIP_PACKAGE_NAME in parent.joinpath("pyproject.toml").read_text():
-                        return parent
-                except OSError:
-                    continue
+            candidate = parent / "pyproject.toml"
+            if not candidate.is_file():
+                continue
+            try:
+                text = candidate.read_text()
+            except OSError:
+                continue
+            if any(a in text for a in anchors):
+                return parent
         return None
 
     def _pip_install_aivg(self, *, force_reinstall: bool) -> tuple[int, str]:
-        """Run `<venv_python> -m pip install <repo>` against the Hermes
+        """Run `<venv_python> -m pip install <source>` against the Hermes
         venv. Returns (returncode, combined_output). Caller wraps with
         timeout / SetupError handling.
+
+        Source resolution: prefer a local repo (developer/editable install
+        flow); fall back to ``pip install aivg`` so PyPI-only installs
+        (``pip install aivg && aivg setup``) bootstrap end-to-end.
         """
         repo = self._find_repo_root()
-        if repo is None:
-            raise SetupError(
-                "setup_partial_failure",
-                f"could not locate {PIP_PACKAGE_NAME!r} source tree to "
-                f"install (no pyproject.toml found in parents of "
-                f"{Path(__file__).resolve()}). Once {PIP_PACKAGE_NAME!r} is on "
-                "PyPI this will fall back to `pip install <name>`.",
-                phase="pip_installing",
-            )
-        cmd = [str(self.venv_python), "-m", "pip", "install", str(repo)]
+        source: str = str(repo) if repo is not None else PIP_PACKAGE_NAME
+        cmd = [str(self.venv_python), "-m", "pip", "install", source]
         if force_reinstall:
             cmd.extend(["--force-reinstall", "--no-deps"])
             # On a re-install, also reinstall deps if needed — separate
             # call so we don't redownload aiortc/av every time.
             cmd_deps = [
                 str(self.venv_python), "-m", "pip", "install",
-                "--upgrade-strategy", "only-if-needed", str(repo),
+                "--upgrade-strategy", "only-if-needed", source,
             ]
             try:
                 subprocess.run(

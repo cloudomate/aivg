@@ -639,7 +639,30 @@ def build_management_app(service: "ManagementService"):  # pragma: no cover
             async for frame in sse_logs(service._sink, **kwargs):
                 await resp.write(frame.encode("utf-8"))
             return resp
-        return web.json_response(service.query_logs(**dict(req.query)))
+        # One-shot snapshot. Only forward query params LogSink.query knows
+        # about — passing an unknown kwarg (e.g. `?follow=` left from the
+        # SSE call shape) would 500 the route. `tail` and `since` get
+        # coerced to numeric.
+        filters: dict[str, Any] = {}
+        for key in ("device_id", "level", "source"):
+            v = req.query.get(key)
+            if v:
+                filters[key] = v
+        since_raw = req.query.get("since")
+        if since_raw:
+            try:
+                filters["since"] = float(since_raw)
+            except ValueError:
+                pass
+        tail_raw = req.query.get("tail")
+        if tail_raw:
+            try:
+                filters["tail"] = max(0, int(tail_raw))
+            except ValueError:
+                pass
+        if "id" in req.match_info:
+            filters["device_id"] = req.match_info["id"]
+        return web.json_response(service.query_logs(**filters))
 
     async def _ws(req):
         """Always-on control-plane WebSocket (constitution III): register,

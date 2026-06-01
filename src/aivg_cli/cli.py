@@ -162,7 +162,16 @@ def _bail_on_rest_error(e: RestError) -> int:
 
 @app.command("list")
 def cmd_list(
-    state: str = typer.Option("all", "--state", help="all | adopted | pending"),
+    state: str = typer.Option(
+        "all", "--state",
+        help=(
+            "all | adopted | pending. NOTE: `pending` is only populated "
+            "when the gateway runs with `auto_adopt_on_register: false` "
+            "(default is true — devices auto-adopt on first connect), or "
+            "after a factory_reset re-registration. Default deployments "
+            "will see no rows under `pending`."
+        ),
+    ),
 ) -> None:
     """List the fleet (or its pending devices)."""
     async def _do() -> int:

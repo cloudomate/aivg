@@ -78,7 +78,9 @@ class LogSink:
         level: str | None = None,
         source: str | None = None,
         since: float | None = None,
+        tail: int | None = None,
     ) -> Iterable[LogEntry]:
+        results = []
         for e in list(self._buf):
             if device_id and e.device_id != device_id:
                 continue
@@ -88,4 +90,7 @@ class LogSink:
                 continue
             if since is not None and e.timestamp < since:
                 continue
-            yield e
+            results.append(e)
+        if tail is not None and tail >= 0:
+            results = results[-tail:]
+        return iter(results)

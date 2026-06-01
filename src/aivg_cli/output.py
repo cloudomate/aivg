@@ -112,13 +112,20 @@ def human_device_state(d: dict) -> None:
 def human_log_entry(e: dict) -> None:
     import time
     from rich.console import Console
+    from rich.markup import escape
 
     console = Console(no_color=_CTX.no_color)
     ts = time.strftime("%H:%M:%S", time.localtime(e.get("timestamp", 0)))
     level = e.get("level", "")
     color = {"ERROR": "red", "WARN": "yellow", "INFO": "", "DEBUG": "dim"}.get(level, "")
-    head = f"[{color}]{ts} {level:<5} {e.get('source','')} {e.get('device_id','')}[/]"
-    console.print(f"{head}  {e.get('message','')}")
+    # Escape device-supplied fields — log messages frequently contain `[/]`,
+    # `[bold]`, etc. which Rich would otherwise parse as markup and raise
+    # MarkupError on.
+    source = escape(str(e.get("source", "")))
+    device_id = escape(str(e.get("device_id", "")))
+    message = escape(str(e.get("message", "")))
+    head = f"[{color}]{ts} {level:<5} {source} {device_id}[/]"
+    console.print(f"{head}  {message}")
 
 
 def _human_age(ts: Optional[float]) -> str:
