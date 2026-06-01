@@ -30,6 +30,11 @@ class ControlPlane {
     std::function<void(const std::string& verb, const std::string& request_id)> on_command;
     std::function<void(const std::string& raw)> on_log;
     std::function<void(const std::string& code, const std::string& detail)> on_error;
+    // Fires when the control WS reopens after a non-clean disconnect (i.e. not
+    // the initial connect). Lets the caller renegotiate the voice plane, which
+    // does not survive a gateway restart even though the management plane
+    // auto-reconnects. See spec FR-015 / upstream bug 5.
+    std::function<void()> on_reconnected;
   };
 
   ControlPlane(std::string gateway_ws_url, std::string device_id, std::string firmware_version,
@@ -67,6 +72,10 @@ class ControlPlane {
   std::atomic<bool> running_{false};
   std::atomic<bool> open_{false};
   std::atomic<bool> adopted_{false};
+  // True once we've seen a close after at least one successful open — used to
+  // distinguish "first connect" from "reconnect" in on_ws_open. Without this we
+  // would fire on_reconnected on the initial handshake too.
+  std::atomic<bool> had_disconnect_{false};
   std::atomic<std::uint32_t> attempt_{0};
   std::atomic<std::uint32_t> heartbeats_sent_{0};
   std::atomic<std::uint32_t> registers_sent_{0};

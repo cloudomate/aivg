@@ -6,8 +6,10 @@
 #include "aivg/sat/satellite.hpp"
 
 #include <atomic>
+#include <cstdlib>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -19,6 +21,13 @@ namespace aivg::sat {
 namespace {
 
 constexpr std::uint32_t kDefaultHeartbeatMs = 30000;
+
+bool renegotiate_disabled() {
+  // Opt-out for sites that don't want SDK-driven WebRTC renegotiation on
+  // gateway-restart reconnects (e.g. lab benches that prefer manual recovery).
+  const char* v = std::getenv("AIVG_SAT_DISABLE_WEBRTC_RENEGOTIATE");
+  return v != nullptr && v[0] != '\0' && v[0] != '0';
+}
 
 std::string control_ws_url(const std::string& gateway_url) {
   // gateway_url is the management base, e.g. "ws://host:8643".
@@ -55,6 +64,9 @@ struct Satellite::Impl {
   std::unique_ptr<detail::ControlPlane> cp;
   std::unique_ptr<detail::VoiceSession> vs;
   std::atomic<SatelliteState> state{SatelliteState::Idle};
+  // Guards voice-session lifecycle so a gateway-restart reconnect can't race
+  // with a user-initiated beginSession/endSession (bug 5).
+  std::mutex vs_mu;
 
   void emit(const SatEvent& ev) {
     if (opts.on_event) opts.on_event(ev);
@@ -77,6 +89,32 @@ std::future<void> Satellite::connect() {
   cb.on_error = [this](const std::string& code, const std::string& detail) {
     impl_->emit(SatError{SatErrorCode::WsDisconnected, code + ": " + detail, std::nullopt});
   };
+  // Bug 5 — gateway restart kills the WebRTC PeerConnection even though the
+  // management WS auto-reconnects. Rebuild the voice session against the
+  // restarted gateway so subsequent wake-word hits can stream again without a
+  // client process restart.
+  cb.on_reconnected = [this]() {
+    if (renegotiate_disabled()) return;
+    std::lock_guard<std::mutex> lk(impl_->vs_mu);
+    if (!impl_->vs) return;  // no active session — nothing to renegotiate
+    std::string prev_sid = impl_->vs->session_id();
+    impl_->vs->end();
+    impl_->vs.reset();
+    impl_->emit(VoiceSessionResult{prev_sid, "gateway_reconnected"});
+
+    auto fresh = std::make_unique<detail::VoiceSession>(
+        derive_voice_base(impl_->opts), impl_->opts.device_id, impl_->opts.audio_input,
+        impl_->opts.audio_output);
+    if (!fresh->begin()) {
+      impl_->emit(SatError{SatErrorCode::SignalingFailed,
+                           "voice renegotiate after gateway reconnect failed", std::nullopt});
+      return;
+    }
+    fresh->unmute();
+    impl_->state.store(SatelliteState::Listening);
+    impl_->emit(VoiceSession{fresh->session_id()});
+    impl_->vs = std::move(fresh);
+  };
 
   impl_->cp = std::make_unique<detail::ControlPlane>(
       control_ws_url(impl_->opts.gateway_url), impl_->opts.device_id,
@@ -89,7 +127,11 @@ std::future<void> Satellite::connect() {
 }
 
 std::future<void> Satellite::disconnect() {
-  if (impl_->vs) impl_->vs->end();
+  {
+    std::lock_guard<std::mutex> lk(impl_->vs_mu);
+    if (impl_->vs) impl_->vs->end();
+    impl_->vs.reset();
+  }
   if (impl_->cp) impl_->cp->stop();
   impl_->state.store(SatelliteState::Idle);
   std::promise<void> p;
@@ -104,6 +146,7 @@ std::future<void> Satellite::beginSession() {
     p.set_value();
     return p.get_future();
   }
+  std::lock_guard<std::mutex> lk(impl_->vs_mu);
   impl_->vs = std::make_unique<detail::VoiceSession>(derive_voice_base(impl_->opts),
                                                      impl_->opts.device_id, impl_->opts.audio_input,
                                                      impl_->opts.audio_output);
@@ -119,9 +162,11 @@ std::future<void> Satellite::beginSession() {
 }
 
 std::future<void> Satellite::endSession() {
+  std::lock_guard<std::mutex> lk(impl_->vs_mu);
   if (impl_->vs) {
     impl_->emit(VoiceSessionResult{impl_->vs->session_id(), "ended"});
     impl_->vs->end();
+    impl_->vs.reset();
   }
   impl_->state.store(SatelliteState::Idle);
   std::promise<void> p;

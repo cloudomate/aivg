@@ -68,14 +68,21 @@ void ControlPlane::connect_once() {
 }
 
 void ControlPlane::on_ws_open() {
+  const bool was_disconnected = had_disconnect_.exchange(false);
   open_.store(true);
   attempt_.store(0);
   ws_->send(proto::build_register(device_id_, kContractVersion));
   registers_sent_.fetch_add(1);
+  // Fire AFTER the re-register so the consumer sees a registered socket.
+  if (was_disconnected && cb_.on_reconnected) cb_.on_reconnected();
 }
 
 void ControlPlane::on_ws_close(int code, const std::string& reason) {
   open_.store(false);
+  // Flag the disconnect so the next on_ws_open knows it's a reconnect. Clean
+  // shutdowns (code 1000 from stop()) still flag here; the supervisor stops
+  // looping in that case, so no on_reconnected ever fires.
+  had_disconnect_.store(true);
   if (cb_.on_error) cb_.on_error("ws_disconnected", reason + " (" + std::to_string(code) + ")");
 }
 

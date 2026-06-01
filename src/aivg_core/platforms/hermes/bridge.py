@@ -287,17 +287,25 @@ class HermesV013Bridge:
             # tools.tts_tool._strip_markdown_for_tts BEFORE synthesis —
             # exactly as Hermes's gateway `_send_voice_reply` and CLI voice
             # do (markdown-stripping is a *caller* responsibility in Hermes;
-            # text_to_speech_tool does NOT self-strip). Pure reuse: no
-            # bespoke normalizer, no emoji/length/config added (constitution
-            # I/IV; specs/009). One site → covers feature-008 `agent_stream`
-            # AND feature-006 `tts_stream` (both synthesize via this method).
-            # If the helper is missing or raises, fall back to the raw text —
-            # never worse than today (FR-008 / contract H6).
+            # text_to_speech_tool does NOT self-strip). One site → covers
+            # feature-008 `agent_stream` AND feature-006 `tts_stream` (both
+            # synthesize via this method). If the helper is missing or
+            # raises, fall back to the raw text — never worse than today
+            # (FR-008 / contract H6).
             try:
                 from tools.tts_tool import _strip_markdown_for_tts  # type: ignore  # noqa: WPS433
                 spoken = _strip_markdown_for_tts(text)
             except Exception:  # noqa: BLE001 - FR-008 raw fallback
                 spoken = text
+            # Belt-and-suspenders pass: catch markdown the Hermes strip
+            # misses (fenced code, images, raw URLs) and strip emoji/ASCII
+            # smileys that Piper/Coqui either literally pronounce or render
+            # to 0 frames. Idempotent; safe to run after the Hermes pass.
+            try:
+                from ...webrtc.tts_text_filter import clean_for_tts  # noqa: WPS433
+                spoken = clean_for_tts(spoken)
+            except Exception:  # noqa: BLE001 - keep the FR-008 raw fallback story
+                pass
             if not spoken or not spoken.strip():
                 raise _EmptyAfterStrip()  # FR-007 / H5 — skip this unit
             raw = text_to_speech_tool(spoken)  # provider/voice from config

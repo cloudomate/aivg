@@ -47,6 +47,11 @@ class AivgSatelliteAdapter:
         self.cfg = cfg or load_adapter_config(config_path)
         self.registry = Registry()
         self.sink = LogSink()
+        # Propagate the TTS text-filter toggle (markdown + emoji stripping)
+        # into the filter module — the Hermes bridge reads its effective
+        # state per-call. Env-var `AIVG_DISABLE_TTS_TEXT_FILTER` still wins.
+        from .webrtc.tts_text_filter import set_enabled as _set_tts_filter
+        _set_tts_filter(self.cfg.tts_text_filter)
         # Feature 015 / FR-001 / FR-007: resolve the active agent
         # platform via the plugin registry (defaults to "hermes" via
         # adapter config). Validate the surface fail-fast at startup so

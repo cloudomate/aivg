@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.2.2] — 2026-06-01 — WebRTC renegotiate after gateway restart + TTS text filter
+
+Small follow-on to `0.2.1`. No wire-contract changes; drop-in.
+
+### Fixed
+
+- **WebRTC voice plane doesn't survive a gateway restart.** When the
+  management WS reconnects after a non-clean close, the C++ SDK now
+  tears down the dead `PeerConnection`, emits
+  `VoiceSessionResult{reason="gateway_reconnected"}`, and rebuilds the
+  voice session with the same audio callbacks under a per-Satellite
+  mutex (`vs_mu`). Internal `ControlPlane::Callbacks::on_reconnected`
+  fires only on real reconnects (skips the first connect). Opt-out via
+  `AIVG_SAT_DISABLE_WEBRTC_RENEGOTIATE=1` for lab benches that prefer
+  manual recovery. Closes upstream bug 5.
+
+### Added
+
+- **TTS markdown + emoji filter.** New
+  `aivg_core.webrtc.tts_text_filter` strips markdown (fenced/inline
+  code, images, links, bare URLs, headers, blockquotes, bullets,
+  numbered lists, strikethrough, bold/italic, tables, HTML tags) +
+  Unicode emoji (faces, symbols, transport, flags, ZWJ sequences) +
+  ASCII smileys (`:)`, `:-(`, `;P`, `<3`, `^_^`, …) from agent replies
+  before TTS synthesis, so Piper/Coqui don't literally pronounce
+  punctuation or emit 0-frame audio for unrenderable codepoints.
+  Idempotent; applied as a belt-and-suspenders pass after Hermes's own
+  `_strip_markdown_for_tts`. Configurable via
+  `satellite.tts_text_filter: bool` (default `true`); per-host override
+  via `AIVG_DISABLE_TTS_TEXT_FILTER=1`. Revises the spec-009 "no emoji
+  handling" decision based on field experience.
+
 ## [0.2.1] — 2026-06-01 — Bug fixes
 
 Patch release on top of the `0.2.0` PyPI baseline.

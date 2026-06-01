@@ -91,6 +91,12 @@ class SatelliteAdapterConfig:
     # Feature 017 — additive transports block. Default-constructed
     # means "ESPHome transport disabled"; pre-017 configs parse fine.
     transports: TransportsConfig = field(default_factory=TransportsConfig)
+    # Strip markdown + emoji/smileys from agent replies before TTS so
+    # Piper/Coqui don't literally pronounce `**bold**` or emit 0-frame
+    # audio for emoji. On by default; set to false to keep raw text (the
+    # pre-this-flag behaviour, useful for debugging the LLM output stream).
+    # Env-var `AIVG_DISABLE_TTS_TEXT_FILTER=1` is a per-host override.
+    tts_text_filter: bool = True
 
     @staticmethod
     def from_mapping(data: dict[str, Any] | None) -> "SatelliteAdapterConfig":
@@ -125,6 +131,7 @@ class SatelliteAdapterConfig:
             device_limit=int(block.get("device_limit", 10)),
             platform=str(platform),
             transports=transports,
+            tts_text_filter=bool(block.get("tts_text_filter", True)),
         )
         cfg.validate()
         return cfg
