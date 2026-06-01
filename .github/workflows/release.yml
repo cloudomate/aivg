@@ -105,15 +105,21 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Publish to TestPyPI
-        run: uv publish --publish-url https://test.pypi.org/legacy/
+        # --check-url makes re-runs idempotent: already-uploaded files for
+        # this version are skipped instead of failing with "file exists".
+        run: uv publish --publish-url https://test.pypi.org/legacy/ --check-url https://test.pypi.org/simple/
 
       - name: Smoke install from TestPyPI
         run: |
           uv venv /tmp/smoke --python 3.11
           # TestPyPI doesn't mirror all deps; use real PyPI as fallback index.
+          # unsafe-best-match: aivg exists on BOTH indexes, so the default
+          # first-index strategy would pin to pypi.org (older version only)
+          # and never see the just-published version on TestPyPI.
           uv pip install --python /tmp/smoke/bin/python \
             -i https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
+            --index-strategy unsafe-best-match \
             "aivg==${GITHUB_REF_NAME#v}"
           /tmp/smoke/bin/aivg --version
           CONTRACT=$(/tmp/smoke/bin/aivg --contract-version | python -c "import sys,json; print(json.load(sys.stdin)['data']['contract_version'])")
@@ -143,7 +149,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Publish to real PyPI
-        run: uv publish
+        run: uv publish --check-url https://pypi.org/simple/
 
       - name: Post-release worldwide-resolve smoke
         run: |
