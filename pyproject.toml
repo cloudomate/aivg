@@ -58,6 +58,16 @@ dependencies = [
     # handshake path.
     "noiseprotocol>=0.3,<0.4",
     "chacha20poly1305-reuseable>=0.13,<0.14",
+    # Feature 021 — gRPC satellite transport. Async server (`grpc.aio`)
+    # hosting the `aivg.satellite.v1.Audio` (and Phase-2 `Management`)
+    # services. NOTE: contrary to the 021 proposal, grpcio is NOT already
+    # transitively present (aioesphomeapi pulls protobuf, not grpcio), so
+    # it is pinned here as a first-class runtime dependency. `protobuf`
+    # backs the checked-in generated stubs; `grpcio-tools` (codegen only)
+    # lives under the `dev` extra.
+    "grpcio>=1.60",
+    "grpcio-reflection>=1.60",  # server reflection for grpcurl diagnosability (FR-013)
+    "protobuf>=4",
 ]
 
 [project.optional-dependencies]
@@ -68,6 +78,10 @@ dev = [
     "ruff>=0.4",
     "black>=24",
     "httpx>=0.27",
+    # Feature 021 — protobuf/gRPC codegen for `scripts/gen_proto.sh`.
+    # Build/dev-time only; generated stubs are checked into the tree so
+    # `pip install aivg` needs no protoc toolchain.
+    "grpcio-tools>=1.60",
 ]
 
 [project.urls]

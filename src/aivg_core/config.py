@@ -57,10 +57,35 @@ class EsphomeTransportConfig:
 
 
 @dataclass
+class GrpcTransportConfig:
+    """gRPC satellite transport (feature 021).
+
+    Off by default (like the esphome block) so pre-021 deployments don't
+    open a new port without the operator's consent. When ``enabled``, the
+    gateway hosts ``aivg.satellite.v1.Audio`` (Phase 1 audio plane) on
+    ``host:port``.
+
+    - ``tls``: ``"insecure"`` (trusted-LAN default) or ``"mtls"`` (fleet;
+      reuses the device keystore at ``api_key_file``). Never silently
+      downgrades from a required-auth posture.
+    - ``downstream_codec``: ``"pcm"`` (safe Phase-1 default) or ``"opus"``.
+    """
+    enabled: bool = False
+    host: str = "0.0.0.0"
+    port: int = 8645
+    tls: str = "insecure"           # "insecure" | "mtls"
+    downstream_codec: str = "pcm"   # "pcm" | "opus"
+    api_key_file: str = "~/.aivg/devices/keys.json"
+
+
+@dataclass
 class TransportsConfig:
     """Top-level transports block. Additive in v1.1.0; absent in
     pre-017 configs (default-constructed)."""
     esphome_api: EsphomeTransportConfig = field(default_factory=EsphomeTransportConfig)
+    # Feature 021 — additive gRPC transport sibling. Default-constructed
+    # means "gRPC transport disabled"; pre-021 configs parse fine.
+    grpc: GrpcTransportConfig = field(default_factory=GrpcTransportConfig)
 
 
 @dataclass
@@ -108,6 +133,7 @@ class SatelliteAdapterConfig:
         # Feature 017: parse the optional transports block (additive).
         transports_block = (block.get("transports") or {})
         esphome_block = (transports_block.get("esphome_api") or {})
+        grpc_block = (transports_block.get("grpc") or {})
         transports = TransportsConfig(
             esphome_api=EsphomeTransportConfig(
                 enabled=bool(esphome_block.get("enabled", False)),
@@ -118,6 +144,16 @@ class SatelliteAdapterConfig:
                 )),
                 bootstrap_key=esphome_block.get("bootstrap_key") or None,
                 devices=list(esphome_block.get("devices") or []),
+            ),
+            grpc=GrpcTransportConfig(
+                enabled=bool(grpc_block.get("enabled", False)),
+                host=str(grpc_block.get("host", "0.0.0.0")),
+                port=int(grpc_block.get("port", 8645)),
+                tls=str(grpc_block.get("tls", "insecure")),
+                downstream_codec=str(grpc_block.get("downstream_codec", "pcm")),
+                api_key_file=str(grpc_block.get(
+                    "api_key_file", "~/.aivg/devices/keys.json"
+                )),
             ),
         )
         cfg = SatelliteAdapterConfig(
@@ -155,6 +191,24 @@ class SatelliteAdapterConfig:
                 raise ValueError(f"{name} out of range: {port}")
         if self.heartbeat_interval <= 0:
             raise ValueError("heartbeat_interval must be positive")
+        # Feature 021 — the gRPC audio port must not collide with the
+        # management or WebRTC sites and must validate its enums.
+        g = self.transports.grpc
+        if g.enabled:
+            if not (1 <= g.port <= 65535):
+                raise ValueError(f"transports.grpc.port out of range: {g.port}")
+            if g.port in (self.management_port, self.webrtc_port):
+                raise ValueError(
+                    "transports.grpc.port must differ from management_port "
+                    "and webrtc_port"
+                )
+            if g.tls not in ("insecure", "mtls"):
+                raise ValueError(f"transports.grpc.tls must be insecure|mtls: {g.tls}")
+            if g.downstream_codec not in ("pcm", "opus"):
+                raise ValueError(
+                    f"transports.grpc.downstream_codec must be pcm|opus: "
+                    f"{g.downstream_codec}"
+                )
 
 
 def _parse_yaml(text: str) -> dict[str, Any]:

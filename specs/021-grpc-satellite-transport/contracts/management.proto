@@ -1,0 +1,60 @@
+// Canonical management/control-plane contract — Phase 2 (design-ahead).
+//
+// Feature 021 Phase 2 moves the native satellite's control plane off the
+// /satellite/ws WebSocket onto gRPC, kept as a SEPARATE long-lived service
+// from Audio.Stream (Constitution III intent: control decoupled from call
+// state; durable control never multiplexed into the per-session audio stream).
+//
+// Observable semantics MUST equal today's WebSocket message set (FR-014):
+// register / heartbeat / state_update / config_changed / command. This is a
+// transport move, not a redesign. Implement only after Phase 1 is field-proven.
+
+syntax = "proto3";
+
+package aivg.satellite.v1;
+
+service Management {
+  // Device registers; gateway returns adoption state + a session-minting handle.
+  rpc Register(RegisterRequest) returns (RegisterReply);
+
+  // Long-lived bidi control channel (replaces /satellite/ws for native).
+  // Device pushes state/heartbeat/wake-turn up; gateway pushes control down.
+  rpc Control(stream StateUpdate) returns (stream ControlMessage);
+}
+
+message RegisterRequest {
+  string device_id   = 1;
+  string device_type = 2;  // rpi | esp32s3 | ... (NOT branched on by gateway core)
+  // Transports the device can speak, best-first (FR-015). e.g. ["grpc","webrtc"].
+  repeated string transport_capabilities = 3;
+}
+
+message RegisterReply {
+  string adoption_state = 1;  // "pending" | "adopted"
+  string chosen_transport = 2; // gateway selection (FR-015); "grpc" for native
+  string config_version  = 3;
+}
+
+message StateUpdate {
+  oneof body {
+    Heartbeat heartbeat = 1;
+    DeviceState state   = 2;  // online/pending/factory_reset transitions
+    TurnEvent turn      = 3;  // wake_fired / end_of_utterance (precise session start, FR-012)
+  }
+}
+
+message ControlMessage {
+  oneof body {
+    StateAck       ack            = 1;
+    ConfigChanged  config_changed = 2;  // mirrors WS "config_changed"
+    Command        command        = 3;  // mirrors WS "command"
+    DeviceState    state_update   = 4;  // mirrors WS "state_update"
+  }
+}
+
+message Heartbeat     { string device_id = 1; uint64 ts_ns = 2; }
+message DeviceState   { string device_id = 1; string state = 2; }
+message TurnEvent     { string session_id = 1; string kind = 2; map<string,string> attrs = 3; }
+message StateAck      { bool ok = 1; }
+message ConfigChanged { string device_id = 1; string config_json = 2; string config_version = 3; }
+message Command       { string device_id = 1; string command = 2; map<string,string> args = 3; }

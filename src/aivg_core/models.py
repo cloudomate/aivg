@@ -216,8 +216,15 @@ class ConnectedClient:
     # Feature 017 — which transport carried the device's registration.
     # Default "webrtc" preserves back-compat for every existing device
     # record. ESPHome-transport devices set this to "esphome_api"
-    # explicitly at register time.
+    # explicitly at register time. Feature 021 adds "grpc" as a valid value.
     transport: str = "webrtc"
+    # Feature 021 — the transports this device advertises it can speak,
+    # best-first (e.g. ["grpc","webrtc"]). Empty preserves back-compat: an
+    # empty/legacy record is treated as advertising only its `transport`.
+    # The gateway selects the best mutually-supported transport from this
+    # set (FR-015); `transport_pin` is an operator override (FR-017).
+    transport_capabilities: list = field(default_factory=list)
+    transport_pin: Optional[str] = None
 
     def touch(self) -> None:
         self.last_seen = time.time()
