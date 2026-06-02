@@ -67,7 +67,7 @@ and latency checks per quickstart §5.
 
 ### Tests for User Story 1 ⚠️ (write first)
 
-- [ ] T009 [P] [US1] Live end-to-end smoke test `sdks/cpp/tests/grpc_audio_smoke.cpp` — register advertising `["grpc","webrtc"]`, open `Audio.Stream`, stream PCM up, assert reply `AudioChunk` + `Transcript`/`SpeakingStarted` (not a ctest; needs a gateway — mirrors `ws_register_smoke`).
+- [X] T009 [P] [US1] Live end-to-end smoke test `sdks/cpp/tests/grpc_audio_smoke.cpp` — register advertising `["grpc","webrtc"]`, open `Audio.Stream`, stream PCM up, assert reply `AudioChunk` + `Transcript`/`SpeakingStarted` (not a ctest; needs a gateway — mirrors `ws_register_smoke`).
 
 ### Implementation for User Story 1
 

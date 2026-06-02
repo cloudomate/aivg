@@ -209,6 +209,14 @@ if(AIVG_SAT_BUILD_TESTS)
       ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated
       ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
     add_test(NAME grpc_transport_inproc COMMAND aivg_sat_grpc_inproc_test)
+
+    # Live gRPC audio smoke (needs a running gateway; NOT a ctest — mirrors
+    # ws_register_smoke). Run: grpc_audio_smoke [host:port].
+    add_executable(grpc_audio_smoke tests/grpc_audio_smoke.cpp)
+    target_link_libraries(grpc_audio_smoke PRIVATE aivg_sat ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
+    target_include_directories(grpc_audio_smoke PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated
+      ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
   endif()
 
   # Live control-plane smoke (needs a running gateway; not registered as a
