@@ -106,6 +106,23 @@ if(AIVG_SAT_ENABLE_VOICE)
     src/satellite.cpp)
 endif()
 
+# Feature 022 — gRPC voice transport (POSIX/RPi tier). OFF by default. Consumes
+# the canonical proto contract (repo-root proto/) via checked-in generated
+# stubs under src/grpc/_generated/. grpc++/protobuf are CONFINED to this tier
+# (FR-015): the ESP-IDF component returns early above and never sees them.
+option(AIVG_SAT_ENABLE_GRPC "Build the gRPC audio transport" OFF)
+set(AIVG_SAT_HAVE_GRPC OFF)
+if(AIVG_SAT_ENABLE_GRPC)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GRPCPP REQUIRED grpc++)
+  pkg_check_modules(PROTOBUF REQUIRED protobuf)
+  list(APPEND AIVG_SAT_CORE_SOURCES
+    src/transport/grpc_transport.cpp
+    src/grpc/_generated/aivg/satellite/v1/audio.pb.cc
+    src/grpc/_generated/aivg/satellite/v1/audio.grpc.pb.cc)
+  set(AIVG_SAT_HAVE_GRPC ON)
+endif()
+
 add_library(aivg_sat ${AIVG_SAT_CORE_SOURCES})
 add_library(aivg::sat ALIAS aivg_sat)
 target_link_libraries(aivg_sat PUBLIC aivg_sat_headers)
@@ -120,6 +137,12 @@ if(AIVG_SAT_ENABLE_VOICE)
   target_include_directories(aivg_sat PRIVATE ${AIVG_SAT_LIBPEER_ROOT}/include)
   target_link_libraries(aivg_sat PRIVATE
     ${AIVG_SAT_LIBPEER_ROOT}/build/src/libpeer.a ${OPUS_LIB} ${MBEDCRYPTO_LIB})
+endif()
+if(AIVG_SAT_HAVE_GRPC)
+  target_include_directories(aivg_sat PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
+  target_link_libraries(aivg_sat PRIVATE ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
+  target_compile_definitions(aivg_sat PRIVATE AIVG_SAT_HAVE_GRPC=1)
 endif()
 
 # --- Dependencies (enabled as integration tasks T012-T020 land) --------------
@@ -146,6 +169,18 @@ if(AIVG_SAT_BUILD_TESTS)
     target_link_libraries(aivg_sat_test_proto PRIVATE aivg_sat nlohmann_json::nlohmann_json)
     target_include_directories(aivg_sat_test_proto PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME test_proto COMMAND aivg_sat_test_proto)
+  endif()
+
+  # Feature 022 — gRPC transport in-process round-trip test (hardware-free:
+  # a fake Audio.Stream server in the same process). Registered as a ctest.
+  if(AIVG_SAT_HAVE_GRPC)
+    add_executable(aivg_sat_grpc_inproc_test tests/grpc_transport_inproc_test.cpp)
+    target_link_libraries(aivg_sat_grpc_inproc_test PRIVATE
+      aivg_sat ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
+    target_include_directories(aivg_sat_grpc_inproc_test PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated
+      ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
+    add_test(NAME grpc_transport_inproc COMMAND aivg_sat_grpc_inproc_test)
   endif()
 
   # Live control-plane smoke (needs a running gateway; not registered as a

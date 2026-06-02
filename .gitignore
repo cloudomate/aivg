@@ -33,3 +33,4 @@ deploy/.state/
 
 # transient ScheduleWakeup lock
 .claude/scheduled_tasks.lock
+.claude/projects/

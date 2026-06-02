@@ -21,6 +21,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libsrtp2-dev \
       libopus-dev \
       nlohmann-json3-dev \
+      # Feature 022 — gRPC transport (POSIX/RPi tier). Debian Bookworm ships
+      # gRPC C++ + protobuf + the codegen plugins via apt, matching the Pi's
+      # OS so the produced binary's ABI lines up 1:1.
+      libgrpc++-dev \
+      libprotobuf-dev \
+      protobuf-compiler \
+      protobuf-compiler-grpc \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace/sdks/cpp
