@@ -75,6 +75,10 @@ class AivgSatelliteAdapter:
         # (dialer) mode. Constructed lazily in :meth:`start`.
         self._esphome_transport = None
         self._esphome_dialer = None
+        # Feature 021 — optional gRPC audio transport. Off by default;
+        # opt-in via ``transports.grpc.enabled``. Constructed lazily in
+        # :meth:`start`.
+        self._grpc_transport = None
 
     # --- Hermes platform-adapter lifecycle (VG-4 shim) -------------------
     async def start(self) -> None:  # pragma: no cover - needs aiohttp
@@ -162,6 +166,30 @@ class AivgSatelliteAdapter:
                 )
                 await self._esphome_dialer.start()
 
+        # 4) Feature 021 — optional gRPC audio transport (additive sibling).
+        #    Off by default; opt-in via ``transports.grpc.enabled``. Routes
+        #    inbound audio through the same ``Session`` / ``AgentPlatform``
+        #    seam as every other transport (Principle IV preserved).
+        grpc_cfg = self.cfg.transports.grpc
+        if grpc_cfg.enabled:
+            from .transports.grpc import GrpcAudioTransport  # noqa: WPS433
+            self._grpc_transport = GrpcAudioTransport(
+                registry=self.registry,
+                platform=self.platform,
+                sink=self.sink,
+                host=grpc_cfg.host,
+                port=grpc_cfg.port,
+                tls=grpc_cfg.tls,
+                downstream_codec=grpc_cfg.downstream_codec,
+                api_key_file=grpc_cfg.api_key_file,
+                ui_broadcast=self.management._broadcast,
+                # US2 — optionally also serve the management/control plane over
+                # gRPC (the WebSocket stays up for browsers/legacy natives).
+                management_service=self.management,
+                mount_management=grpc_cfg.management_over_grpc,
+            )
+            await self._grpc_transport.start()
+
     async def stop(self) -> None:  # pragma: no cover - needs aiohttp
         for runner in self._sites:
             await runner.cleanup()
@@ -171,6 +199,9 @@ class AivgSatelliteAdapter:
         if self._esphome_dialer is not None:
             await self._esphome_dialer.stop()
             self._esphome_dialer = None
+        if self._grpc_transport is not None:
+            await self._grpc_transport.stop()
+            self._grpc_transport = None
         self._sites.clear()
 
 

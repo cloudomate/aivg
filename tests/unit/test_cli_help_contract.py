@@ -92,19 +92,18 @@ def test_global_flags_present():
         assert flag in out, f"global flag {flag!r} missing"
 
 
-def test_contract_version_at_post_018_public_baseline():
-    """Spec 018 Clarification Q2: the wire-contract version resets to
-    0.2.0 at the first PyPI release (public-baseline boundary).
-    Pre-PyPI history: 1.0.0 → (feature 017) 1.1.0 → (feature 018)
-    reset to 0.2.0 — explicit baseline alignment for the first publicly
-    versioned release."""
+def test_contract_version_at_post_021_baseline():
+    """Feature 021 bumps the wire-contract version to 0.3.0 — an ADDITIVE
+    minor over the 018 public baseline (0.2.0) that adds the gRPC transport.
+    History: 1.0.0 → (017) 1.1.0 → (018) 0.2.0 → (021) 0.3.0."""
     out = _aivg("--json", "--contract-version")
     import json as _json
     env = _json.loads(out.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "0.2.0", (
-        "Spec 018 Clarification Q2 locks the post-PyPI contract version "
-        "at 0.2.0. Pre-018 history (1.1.0, 1.0.0) is internal only."
+    assert env["data"]["contract_version"] == "0.3.0", (
+        "Feature 021 bumps the contract envelope to 0.3.0 (additive: adds "
+        "the grpc transport alongside webrtc + esphome_api)."
     )
+    assert "grpc" in env["data"].get("transports", [])
 
 
 def test_device_command_help_lists_args_flag():

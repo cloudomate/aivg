@@ -33,12 +33,19 @@ from .output import (
 from .rest_client import ManagementClient, RestError
 from .stream import stream_log_entries
 
-CONTRACT_VERSION = "0.2.0"  # feature 018 — reset to public-baseline at first PyPI release (was "1.1.0" pre-PyPI; before that "1.0.0")
+# feature 018 reset to public-baseline 0.2.0 (was "1.1.0" pre-PyPI; before
+# that "1.0.0"). Feature 021 bumps to 0.3.0 — ADDITIVE minor: the build now
+# advertises a third transport ("grpc") alongside webrtc + esphome_api. Same
+# shape as feature 017's 1.0.0→1.1.0 ESPHome additive bump; existing
+# webrtc/esphome clients are unaffected.
+CONTRACT_VERSION = "0.3.0"
 # The transports list is REPORTED by the gateway at runtime (it knows which
-# listeners are bound). The CLI-side fallback emits both names because the
-# enabled-state isn't queryable from the CLI without hitting the gateway;
-# operators rely on this as a "what transports CAN the gateway speak?" hint.
-SUPPORTED_TRANSPORTS = ["webrtc", "esphome_api"]
+# listeners are bound). The CLI-side hint emits the full build-supported set
+# (a "what transports CAN the gateway speak?" hint) — sourced from the core
+# transports package so there is one source of truth (feature 021).
+from aivg_core.transports import SUPPORTED_TRANSPORTS as _CORE_SUPPORTED_TRANSPORTS  # noqa: E402
+
+SUPPORTED_TRANSPORTS = list(_CORE_SUPPORTED_TRANSPORTS)
 
 app = typer.Typer(
     name="aivg",

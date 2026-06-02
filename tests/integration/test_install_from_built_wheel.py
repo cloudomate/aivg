@@ -134,8 +134,9 @@ def test_wheel_install_into_throwaway_venv_produces_working_aivg(built_wheel):
     # The CLI's hardcoded `version` constant inside `aivg_cli/cli.py` is a
     # separate axis from pyproject.toml's [project] version — see plan.md
     # "Cross-cutting non-issues" + the contract document. For this test we
-    # care that the contract_version envelope is the post-018 reset value.
-    assert data["contract_version"] == "0.2.0", (
-        f"Expected contract_version '0.2.0' (Spec Clarification Q2), got "
+    # care that the contract_version envelope is the current value (feature
+    # 021 bumped it 0.2.0 → 0.3.0, additive: adds the grpc transport).
+    assert data["contract_version"] == "0.3.0", (
+        f"Expected contract_version '0.3.0' (feature 021 additive bump), got "
         f"{data['contract_version']!r}"
     )

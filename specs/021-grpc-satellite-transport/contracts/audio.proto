@@ -1,0 +1,94 @@
+// Canonical audio-plane contract for the AIVG gRPC satellite transport.
+//
+// Phase 1 of feature 021. SINGLE SOURCE OF TRUTH (FR-001): the gateway
+// (Python, aivg_core.transports.grpc) and every native client (C++, in the
+// aivg-devices repo) generate their bindings from THIS file — the contract
+// cannot drift. Ships verbatim to repo-root proto/aivg/satellite/v1/audio.proto.
+//
+// Wire compatibility (FR-004): additive only. New fields/event kinds use new
+// tag numbers; never renumber or reuse a tag; never change a field's type.
+// Reserve removed tags.
+
+syntax = "proto3";
+
+package aivg.satellite.v1;
+
+// One bidirectional stream per voice session. The session_id (minted by the
+// management plane) is sent in the first ClientFrame (SessionHeader) and keys
+// the stream to an adopted satellite's open session (FR-006).
+service Audio {
+  rpc Stream(stream ClientFrame) returns (stream ServerFrame);
+}
+
+// ----------------------------------------------------------------------------
+// Device -> gateway
+// ----------------------------------------------------------------------------
+message ClientFrame {
+  oneof body {
+    SessionHeader session = 1;  // first frame ONLY
+    PcmChunk      pcm     = 2;  // 16 kHz int16 LE mono, 20 ms (640 B) frames
+    ClientEvent   event   = 3;  // wake / end-of-utterance / barge-in
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Gateway -> device
+// ----------------------------------------------------------------------------
+message ServerFrame {
+  oneof body {
+    AudioChunk  audio      = 1;  // gateway-chosen codec, explicit
+    ServerEvent event      = 2;  // speaking / vad lifecycle
+    Transcript  transcript = 3;  // streaming partial / final (FR-010)
+  }
+}
+
+message SessionHeader {
+  string session_id = 1;
+  // Client's downstream-codec preference, best-first. Gateway picks the first
+  // it supports (FR-009); empty => gateway default (PCM_S16LE_16K).
+  repeated Codec downstream_codec_pref = 2;
+}
+
+message PcmChunk {
+  bytes  samples = 1;  // raw int16 LE PCM, 16 kHz mono
+  uint64 ts_ns   = 2;  // capture timestamp (monotonic, ns)
+}
+
+message AudioChunk {
+  Codec  codec   = 1;  // explicit; never assumed
+  bytes  payload = 2;  // OPUS frame or raw PCM per codec
+  uint64 seq     = 3;  // monotonic per stream, for ordering/gap detection
+}
+
+message Transcript {
+  string text     = 1;
+  bool   is_final = 2;
+}
+
+enum Codec {
+  CODEC_UNSPECIFIED   = 0;
+  CODEC_OPUS          = 1;
+  CODEC_PCM_S16LE_16K = 2;
+}
+
+message ClientEvent {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;  // proto3: keep a real 0 default
+    WAKE_FIRED       = 1;  // explicit session start (FR-012)
+    END_OF_UTTERANCE = 2;  // client-side endpoint hint -> gateway EOF
+    BARGE_IN_START   = 3;  // user spoke over playback
+  }
+  Kind kind = 1;
+  map<string, string> attrs = 2;
+}
+
+message ServerEvent {
+  enum Kind {
+    KIND_UNSPECIFIED  = 0;
+    SPEAKING_STARTED  = 1;
+    SPEAKING_ENDED    = 2;
+    VAD_DETECTED      = 3;
+  }
+  Kind kind = 1;
+  map<string, string> attrs = 2;
+}
