@@ -76,7 +76,7 @@ and latency checks per quickstart §5.
 - [X] T012 [US1] Downstream in `grpc_transport.cpp`: `ServerFrame.audio` → `on_remote_audio(payload, size, codec)` (reuse `OpusBridge` decode for `CODEC_OPUS`, passthrough for PCM); `ServerFrame.event`/`transcript` → `on_event(...)`.
 - [X] T013 [US1] Map upstream `ClientEvent` kinds (wake-fired / end-of-utterance / barge-in) onto the stream in `grpc_transport.cpp`.
 - [X] T014 [US1] Construct `GrpcTransport` at session begin in `sdks/cpp/src/satellite.cpp` / `voice_session.cpp` when the chosen transport is gRPC; set `VoiceSession.transport = grpc`.
-- [ ] T015 [US1] Reconnect + drop-surfacing: a dropped `Audio.Stream` → `stop()` + emit the existing `VoiceSessionResult{reason}`; reuse `Satellite::on_reconnected` to rebuild the session on gateway restart (FR-012/FR-013), in `grpc_transport.cpp` / `satellite.cpp`.
+- [X] T015 [US1] Reconnect + drop-surfacing: a dropped `Audio.Stream` → `stop()` + emit the existing `VoiceSessionResult{reason}`; reuse `Satellite::on_reconnected` to rebuild the session on gateway restart (FR-012/FR-013), in `grpc_transport.cpp` / `satellite.cpp`.
 - [X] T016 [US1] gRPC channel credentials from `SatelliteOptions`: insecure on trusted LAN (default), `grpc::SslCredentials` for fleet; never silently downgrade a required-auth posture (FR-014), in `grpc_transport.cpp`.
 
 **Checkpoint**: US1 functional — an RPi-class device completes a reliable, auto-recovering voice turn over gRPC. **MVP.** (Soak gate before any default flip — Polish.)

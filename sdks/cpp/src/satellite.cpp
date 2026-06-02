@@ -141,6 +141,21 @@ struct Satellite::Impl {
   void emit(const SatEvent& ev) {
     if (opts.on_event) opts.on_event(ev);
   }
+
+  // Feature 022 / T015 — map a voice-transport event onto the public SatEvent
+  // surface (FR-006/FR-013). `sid` is captured per-session at begin time.
+  void on_transport_event(const detail::TransportEvent& te, const std::string& sid) {
+    using K = detail::TransportEvent::Kind;
+    switch (te.kind) {
+      case K::Transcript:      emit(TranscriptDelta{te.text, te.is_final}); break;
+      case K::SpeakingStarted: emit(RemoteStreamEvent{"speaking_started"}); break;
+      case K::SpeakingEnded:   emit(RemoteStreamEvent{"speaking_ended"}); break;
+      case K::VadDetected:     emit(RemoteStreamEvent{"vad_detected"}); break;
+      case K::StreamDropped:
+        emit(VoiceSessionResult{sid, te.reason.empty() ? "dropped" : te.reason});
+        break;
+    }
+  }
 };
 
 Satellite::Satellite(SatelliteOptions options) : impl_(std::make_unique<Impl>(std::move(options))) {}
@@ -185,6 +200,12 @@ std::future<void> Satellite::connect() {
       impl_->emit(SatError{SatErrorCode::SignalingFailed,
                            "voice renegotiate after gateway reconnect failed", std::nullopt});
       return;
+    }
+    {
+      const std::string sid = fresh->session_id();
+      auto* ip = impl_.get();
+      fresh->set_on_event(
+          [ip, sid](const detail::TransportEvent& te) { ip->on_transport_event(te, sid); });
     }
     fresh->unmute();
     impl_->state.store(SatelliteState::Listening);
@@ -235,9 +256,13 @@ std::future<void> Satellite::beginSession() {
   impl_->vs = std::make_unique<detail::VoiceSession>(
       std::move(transport), impl_->opts.audio_input, impl_->opts.audio_output);
   if (impl_->vs->begin()) {
+    const std::string sid = impl_->vs->session_id();
+    auto* ip = impl_.get();
+    impl_->vs->set_on_event(
+        [ip, sid](const detail::TransportEvent& te) { ip->on_transport_event(te, sid); });
     impl_->vs->unmute();
     impl_->state.store(SatelliteState::Listening);
-    impl_->emit(VoiceSession{impl_->vs->session_id()});
+    impl_->emit(VoiceSession{sid});
   } else {
     impl_->emit(SatError{SatErrorCode::SignalingFailed, "beginSession failed", std::nullopt});
   }

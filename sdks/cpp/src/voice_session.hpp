@@ -39,6 +39,13 @@ class VoiceSession {
   bool is_active() const noexcept { return active_.load(); }
   const std::string& session_id() const noexcept { return session_id_; }
 
+  // Forward transport lifecycle events (transcript / speaking / stream-drop) to
+  // the caller, which maps them onto the public SatEvent surface (FR-006/FR-013).
+  // Set after begin() so the callback can carry the now-known session id.
+  void set_on_event(Transport::OnEvent cb) {
+    if (transport_) transport_->set_on_event(std::move(cb));
+  }
+
  private:
   void mic_pump();
   void on_remote_audio(const std::uint8_t* data, std::size_t size, Codec codec);

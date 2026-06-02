@@ -40,6 +40,9 @@ class FakeTransport : public Transport {
       on_audio_(reinterpret_cast<const std::uint8_t*>(pcm), samples * sizeof(std::int16_t),
                 Codec::PcmS16le16k);
   }
+  void emit_event(const TransportEvent& te) {
+    if (on_event_) on_event_(te);
+  }
 
   std::atomic<int> mic_frames_{0};
   std::atomic<long> mic_samples_{0};
@@ -83,8 +86,34 @@ int main() {
   assert(played.load() == static_cast<long>(pcm.size()) &&
          "downstream PCM must reach playback unchanged");
 
+  // Transport events forward through VoiceSession::set_on_event (T015).
+  std::atomic<int> transcripts{0}, drops{0};
+  std::string last_transcript;
+  vs.set_on_event([&](const TransportEvent& te) {
+    if (te.kind == TransportEvent::Kind::Transcript) {
+      transcripts.fetch_add(1);
+      last_transcript = te.text;
+    } else if (te.kind == TransportEvent::Kind::StreamDropped) {
+      drops.fetch_add(1);
+    }
+  });
+  {
+    TransportEvent t;
+    t.kind = TransportEvent::Kind::Transcript;
+    t.text = "partial hi";
+    t.is_final = false;
+    raw->emit_event(t);
+    TransportEvent d;
+    d.kind = TransportEvent::Kind::StreamDropped;
+    d.reason = "test";
+    raw->emit_event(d);
+  }
+  assert(transcripts.load() == 1 && last_transcript == "partial hi" &&
+         "transcript event must forward through the seam");
+  assert(drops.load() == 1 && "stream-drop event must forward through the seam");
+
   vs.end();
-  std::printf("test_transport_seam: OK (mic_frames=%d played=%ld)\n",
-              raw->mic_frames_.load(), played.load());
+  std::printf("test_transport_seam: OK (mic_frames=%d played=%ld transcripts=%d drops=%d)\n",
+              raw->mic_frames_.load(), played.load(), transcripts.load(), drops.load());
   return 0;
 }
