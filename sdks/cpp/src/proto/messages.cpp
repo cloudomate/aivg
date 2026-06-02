@@ -9,12 +9,15 @@ namespace aivg::sat::proto {
 
 using nlohmann::json;
 
-std::string build_register(const std::string& device_id,
-                           const std::string& contract_version) {
-  return json{{"type", "register"},
-              {"device_id", device_id},
-              {"contract_version", contract_version}}
-      .dump();
+std::string build_register(const std::string& device_id, const std::string& contract_version,
+                           const std::vector<std::string>& transport_capabilities) {
+  json j{{"type", "register"},
+         {"device_id", device_id},
+         {"contract_version", contract_version}};
+  if (!transport_capabilities.empty()) {
+    j["transport_capabilities"] = transport_capabilities;  // best-first (022)
+  }
+  return j.dump();
 }
 
 std::string build_heartbeat(const std::string& device_id, SatelliteState state,
@@ -102,6 +105,7 @@ Inbound parse_inbound(const std::string& raw) {
   out.type = classify(j["type"].get<std::string>());
   out.device_id = str_or_empty(j, "device_id");
   out.adoption_state = str_or_empty(j, "adoption_state");
+  out.chosen_transport = str_or_empty(j, "chosen_transport");  // 022 negotiation
   out.session_id = str_or_empty(j, "session_id");
   out.request_id = str_or_empty(j, "request_id");
   out.verb = str_or_empty(j, "verb");

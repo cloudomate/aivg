@@ -75,7 +75,7 @@ and latency checks per quickstart §5.
 - [X] T011 [US1] `send_mic` → `ClientFrame.pcm` (`PcmChunk`, raw 16 kHz s16le, 20 ms) — **no on-device Opus encode** on the upstream path (R-3), in `grpc_transport.cpp`.
 - [X] T012 [US1] Downstream in `grpc_transport.cpp`: `ServerFrame.audio` → `on_remote_audio(payload, size, codec)` (reuse `OpusBridge` decode for `CODEC_OPUS`, passthrough for PCM); `ServerFrame.event`/`transcript` → `on_event(...)`.
 - [X] T013 [US1] Map upstream `ClientEvent` kinds (wake-fired / end-of-utterance / barge-in) onto the stream in `grpc_transport.cpp`.
-- [ ] T014 [US1] Construct `GrpcTransport` at session begin in `sdks/cpp/src/satellite.cpp` / `voice_session.cpp` when the chosen transport is gRPC; set `VoiceSession.transport = grpc`.
+- [X] T014 [US1] Construct `GrpcTransport` at session begin in `sdks/cpp/src/satellite.cpp` / `voice_session.cpp` when the chosen transport is gRPC; set `VoiceSession.transport = grpc`.
 - [ ] T015 [US1] Reconnect + drop-surfacing: a dropped `Audio.Stream` → `stop()` + emit the existing `VoiceSessionResult{reason}`; reuse `Satellite::on_reconnected` to rebuild the session on gateway restart (FR-012/FR-013), in `grpc_transport.cpp` / `satellite.cpp`.
 - [X] T016 [US1] gRPC channel credentials from `SatelliteOptions`: insecure on trusted LAN (default), `grpc::SslCredentials` for fleet; never silently downgrade a required-auth posture (FR-014), in `grpc_transport.cpp`.
 
@@ -112,15 +112,15 @@ is served WebRTC; an existing feature-020 integration builds with no source chan
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T020 [P] [US3] Extend `sdks/cpp/tests/test_transport_seam.cpp` (or add `tests/test_negotiation.cpp`): advertised `transport_capabilities` reflect build flags; `chosen_transport` selects the right `Transport`; an unsatisfiable pin yields a `SatError`; a WebRTC-only build still selects WebRTC.
+- [X] T020 [P] [US3] Extend `sdks/cpp/tests/test_transport_seam.cpp` (or add `tests/test_negotiation.cpp`): advertised `transport_capabilities` reflect build flags; `chosen_transport` selects the right `Transport`; an unsatisfiable pin yields a `SatError`; a WebRTC-only build still selects WebRTC.
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Add `transport_capabilities` to the register frame in `sdks/cpp/src/proto/messages.{hpp,cpp}` (`build_register`), derived from compiled-in transports (`["grpc","webrtc"]` vs `["webrtc"]`); thread through `sdks/cpp/src/control_plane.cpp` (FR-011/R-5).
-- [ ] T022 [US3] Read `chosen_transport` from the register reply in `control_plane.{hpp,cpp}` and surface it so `satellite.cpp` selects the matching `Transport` at session begin.
-- [ ] T023 [US3] Implement a transport pin (`SatelliteOptions.transport` = auto|grpc|webrtc) and an unsatisfiable-pin `SatError` in `satellite.cpp` (FR-011).
-- [ ] T024 [US3] Add the **additive** public options to `sdks/cpp/include/aivg/sat/satellite.hpp` (`transport`, `grpc_port`, `grpc_tls`) with defaults preserving feature-020 WebRTC behaviour (FR-003/SC-005).
-- [ ] T025 [US3] Regression: a WebRTC-only build and a pre-021 gateway still complete a turn over WebRTC — assert in `compile_check.cpp` / the negotiation test (FR-011 fallback).
+- [X] T021 [US3] Add `transport_capabilities` to the register frame in `sdks/cpp/src/proto/messages.{hpp,cpp}` (`build_register`), derived from compiled-in transports (`["grpc","webrtc"]` vs `["webrtc"]`); thread through `sdks/cpp/src/control_plane.cpp` (FR-011/R-5).
+- [X] T022 [US3] Read `chosen_transport` from the register reply in `control_plane.{hpp,cpp}` and surface it so `satellite.cpp` selects the matching `Transport` at session begin.
+- [X] T023 [US3] Implement a transport pin (`SatelliteOptions.transport` = auto|grpc|webrtc) and an unsatisfiable-pin `SatError` in `satellite.cpp` (FR-011).
+- [X] T024 [US3] Add the **additive** public options to `sdks/cpp/include/aivg/sat/satellite.hpp` (`transport`, `grpc_port`, `grpc_tls`) with defaults preserving feature-020 WebRTC behaviour (FR-003/SC-005).
+- [X] T025 [US3] Regression: a WebRTC-only build and a pre-021 gateway still complete a turn over WebRTC — assert in `compile_check.cpp` / the negotiation test (FR-011 fallback).
 
 **Checkpoint**: All three stories independently functional; mixed fleet safe; no API break.
 

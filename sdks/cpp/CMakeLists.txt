@@ -165,6 +165,11 @@ if(AIVG_SAT_BUILD_TESTS)
   target_include_directories(aivg_sat_test_logic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   add_test(NAME test_logic COMMAND aivg_sat_test_logic)
 
+  # Feature 022 — transport-negotiation logic (pure; no backend deps).
+  add_executable(aivg_sat_test_negotiation tests/test_negotiation.cpp)
+  target_include_directories(aivg_sat_test_negotiation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME test_negotiation COMMAND aivg_sat_test_negotiation)
+
   if(nlohmann_json_FOUND)
     add_executable(aivg_sat_test_proto tests/test_proto.cpp)
     target_link_libraries(aivg_sat_test_proto PRIVATE aivg_sat nlohmann_json::nlohmann_json)

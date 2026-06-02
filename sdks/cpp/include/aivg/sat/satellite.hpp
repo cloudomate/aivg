@@ -33,6 +33,13 @@ struct Timeouts {
   std::uint32_t signaling_ms = 8000;
 };
 
+// Feature 022 — voice-plane transport selection. `Auto` advertises every
+// transport this build supports and uses the one the gateway negotiates
+// (preferring gRPC for native). `Webrtc`/`Grpc` pin a transport; an
+// unsatisfiable pin (not compiled into this build) surfaces a SatError.
+// Default `Auto` preserves feature-020 behaviour (WebRTC-only builds → WebRTC).
+enum class TransportPref { Auto, Webrtc, Grpc };
+
 struct SatelliteOptions {
   std::string gateway_url;                  // management plane (control WS + REST)
   std::optional<std::string> signaling_url;  // voice plane; defaults from gateway_url
@@ -45,6 +52,10 @@ struct SatelliteOptions {
   AudioInputCallback audio_input;
   AudioOutputCallback audio_output;
   EventHandler on_event;
+  // Feature 022 — additive transport options (defaults preserve WebRTC).
+  TransportPref transport = TransportPref::Auto;
+  std::uint16_t grpc_port = 8645;  // gRPC audio-plane port on the gateway host
+  bool grpc_tls = false;           // insecure (trusted LAN) vs SSL/mTLS (fleet)
 };
 
 // Owns one always-on control-plane WS and at most one active WebRTC voice

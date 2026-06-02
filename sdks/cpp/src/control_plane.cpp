@@ -13,15 +13,22 @@ namespace aivg::sat::detail {
 
 ControlPlane::ControlPlane(std::string gateway_ws_url, std::string device_id,
                            std::string firmware_version, ReconnectPolicy reconnect,
-                           std::uint32_t heartbeat_interval_ms, Callbacks cb)
+                           std::uint32_t heartbeat_interval_ms, Callbacks cb,
+                           std::vector<std::string> transport_capabilities)
     : url_(std::move(gateway_ws_url)),
       device_id_(std::move(device_id)),
       firmware_version_(std::move(firmware_version)),
       reconnect_(reconnect),
       heartbeat_interval_ms_(heartbeat_interval_ms),
-      cb_(std::move(cb)) {}
+      cb_(std::move(cb)),
+      transport_capabilities_(std::move(transport_capabilities)) {}
 
 ControlPlane::~ControlPlane() { stop(); }
+
+std::string ControlPlane::chosen_transport() const {
+  std::lock_guard<std::mutex> lk(ct_mu_);
+  return chosen_transport_;
+}
 
 void ControlPlane::start() {
   if (running_.exchange(true)) return;
@@ -71,7 +78,7 @@ void ControlPlane::on_ws_open() {
   const bool was_disconnected = had_disconnect_.exchange(false);
   open_.store(true);
   attempt_.store(0);
-  ws_->send(proto::build_register(device_id_, kContractVersion));
+  ws_->send(proto::build_register(device_id_, kContractVersion, transport_capabilities_));
   registers_sent_.fetch_add(1);
   // Fire AFTER the re-register so the consumer sees a registered socket.
   if (was_disconnected && cb_.on_reconnected) cb_.on_reconnected();
@@ -90,6 +97,10 @@ void ControlPlane::on_ws_message(const std::string& text) {
   auto in = proto::parse_inbound(text);
   switch (in.type) {
     case proto::InboundType::Registered: {
+      if (!in.chosen_transport.empty()) {
+        std::lock_guard<std::mutex> lk(ct_mu_);
+        chosen_transport_ = in.chosen_transport;
+      }
       if (!in.adoption_state.empty() && in.adoption_state != adoption_state_) {
         std::string prev = adoption_state_;
         adoption_state_ = in.adoption_state;

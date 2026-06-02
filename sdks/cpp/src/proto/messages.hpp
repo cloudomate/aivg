@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "aivg/sat/state.hpp"
 
@@ -15,7 +16,11 @@ namespace aivg::sat::proto {
 
 // ---- Outbound (SDK → gateway): build the exact JSON the gateway expects ----
 
-std::string build_register(const std::string& device_id, const std::string& contract_version);
+// Feature 022 — `transport_capabilities` (best-first) is added to the register
+// frame so the gateway can negotiate the voice transport (feature 021 / US3).
+// Empty preserves the pre-022 frame exactly (back-compat).
+std::string build_register(const std::string& device_id, const std::string& contract_version,
+                           const std::vector<std::string>& transport_capabilities = {});
 
 std::string build_heartbeat(const std::string& device_id, SatelliteState state,
                             std::uint32_t uptime_s, const std::string& firmware_version);
@@ -49,6 +54,7 @@ struct Inbound {
   // access stays in raw for the dispatcher; this keeps the hot fields cheap.
   std::string device_id;       // state_update / config_changed filter key
   std::string adoption_state;  // registered / state_update: "pending"|"adopted"
+  std::string chosen_transport;  // registered: gateway-negotiated transport (022)
   std::string gateway_state;   // {"type":"state"} value (may be "thinking")
   std::string session_id;
   std::string request_id;      // command
