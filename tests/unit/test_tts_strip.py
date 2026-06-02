@@ -91,7 +91,10 @@ async def test_stripped_text_reaches_synth_not_raw(tmp_path):
         out = await HermesV013Bridge().tts_synthesize(raw, ctx=_CTX)
 
     assert seen_strip == [raw]                       # strip saw the raw text
-    assert seen_tts == ["CLEAN::bold and a [link](http://x.y/z)"]  # synth saw STRIPPED
+    # synth saw the STRIPPED text. Feature 0.2.2 added a belt-and-suspenders
+    # `tts_text_filter` pass AFTER Hermes's own strip, so the markdown link is
+    # additionally reduced to its label ("[link](http://x.y/z)" -> "link").
+    assert seen_tts == ["CLEAN::bold and a link"]
     assert raw not in seen_tts                        # raw never synthesised
     assert out == expected
 
@@ -110,7 +113,11 @@ async def test_raw_fallback_when_strip_raises(tmp_path):
     with _fake_tts(_strip, tts_fn):
         out = await HermesV013Bridge().tts_synthesize(raw, ctx=_CTX)
 
-    assert seen_tts == [raw]      # fell back to the raw, un-stripped text
+    # Fell back to the raw text (Hermes strip raised) — but the 0.2.2
+    # belt-and-suspenders `tts_text_filter` still runs, so the bold markers
+    # are removed ("**still spoken**" -> "still spoken"). Never worse than
+    # today; the fallback still produces speakable text.
+    assert seen_tts == ["still spoken even if strip breaks"]
     assert out == expected
 
 
