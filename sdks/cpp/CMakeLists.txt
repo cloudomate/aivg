@@ -102,6 +102,7 @@ if(AIVG_SAT_ENABLE_VOICE)
     src/signaling.cpp
     src/transport/opus_bridge.cpp
     src/transport/libpeer_transport.cpp
+    src/transport/webrtc_transport.cpp
     src/voice_session.cpp
     src/satellite.cpp)
 endif()
@@ -169,6 +170,21 @@ if(AIVG_SAT_BUILD_TESTS)
     target_link_libraries(aivg_sat_test_proto PRIVATE aivg_sat nlohmann_json::nlohmann_json)
     target_include_directories(aivg_sat_test_proto PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME test_proto COMMAND aivg_sat_test_proto)
+  endif()
+
+  # Feature 022 — transport-seam test: VoiceSession driven by a FakeTransport.
+  # Hardware-free and libpeer-free (only needs Opus for the decode path), so it
+  # validates the seam refactor independently of the WebRTC/gRPC backends.
+  find_library(SEAM_OPUS_LIB opus)
+  if(SEAM_OPUS_LIB)
+    add_executable(aivg_sat_test_transport_seam
+      tests/test_transport_seam.cpp
+      src/voice_session.cpp
+      src/transport/opus_bridge.cpp)
+    target_include_directories(aivg_sat_test_transport_seam PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(aivg_sat_test_transport_seam PRIVATE ${SEAM_OPUS_LIB} Threads::Threads)
+    add_test(NAME test_transport_seam COMMAND aivg_sat_test_transport_seam)
   endif()
 
   # Feature 022 — gRPC transport in-process round-trip test (hardware-free:

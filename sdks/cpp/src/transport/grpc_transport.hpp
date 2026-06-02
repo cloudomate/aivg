@@ -44,6 +44,8 @@ class GrpcTransport : public Transport {
 
   bool begin() override;
   const std::string& session_id() const noexcept override { return opts_.session_id; }
+  // 16 kHz * 20 ms = 320 samples per upstream PcmChunk.
+  std::size_t mic_frame_samples() const noexcept override { return 320; }
   void send_mic(const std::int16_t* pcm16, std::size_t samples) override;
   bool ready() const noexcept override { return ready_.load(); }
   void stop() override;

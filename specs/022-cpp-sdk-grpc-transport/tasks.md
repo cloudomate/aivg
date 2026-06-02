@@ -46,9 +46,9 @@ through it. **⚠️ BLOCKS all user stories** — both US1 (gRPC) and US3
 (selection) require the seam; the refactor must preserve WebRTC behaviour.
 
 - [X] T004 Create the abstract interface `sdks/cpp/src/transport/transport.hpp` (`class Transport` + `TransportEvent` + `Codec`) exactly per `contracts/transport-interface.md` (audio/lifecycle/event altitude — no SDP methods).
-- [ ] T005 Refactor `sdks/cpp/src/transport/libpeer_transport.{hpp,cpp}` to implement `Transport` (offer/answer become internals of `begin()`; `send_opus`→`send_mic` encodes via `OpusBridge`; `is_completed()`→`ready()`; peer-failed→`on_event(StreamDropped)`) — **no behaviour change**.
-- [ ] T006 Change `sdks/cpp/src/voice_session.{hpp,cpp}` to hold `std::unique_ptr<Transport>` (was a concrete `LibpeerTransport` member); route the mic pump through `transport_->send_mic(...)`; map `TransportEvent` → the existing `SatEvent` cases (FR-006).
-- [ ] T007 Create an in-process `FakeTransport` (records mic PCM, emits scripted remote audio/events) and `sdks/cpp/tests/test_transport_seam.cpp` driving a real `VoiceSession` against it; register as a ctest (R-7).
+- [X] T005 Refactor `sdks/cpp/src/transport/libpeer_transport.{hpp,cpp}` to implement `Transport` (offer/answer become internals of `begin()`; `send_opus`→`send_mic` encodes via `OpusBridge`; `is_completed()`→`ready()`; peer-failed→`on_event(StreamDropped)`) — **no behaviour change**.
+- [X] T006 Change `sdks/cpp/src/voice_session.{hpp,cpp}` to hold `std::unique_ptr<Transport>` (was a concrete `LibpeerTransport` member); route the mic pump through `transport_->send_mic(...)`; map `TransportEvent` → the existing `SatEvent` cases (FR-006).
+- [X] T007 Create an in-process `FakeTransport` (records mic PCM, emits scripted remote audio/events) and `sdks/cpp/tests/test_transport_seam.cpp` driving a real `VoiceSession` against it; register as a ctest (R-7).
 - [X] T008 Verify a **gRPC-disabled** build is behaviour-identical to feature 020: `sdks/cpp/tests/compile_check.cpp` + existing WebRTC tests stay green (SC-005).
 
 **Checkpoint**: Seam in place; WebRTC unchanged; a transport can be unit-tested without hardware.

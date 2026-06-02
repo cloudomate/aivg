@@ -57,7 +57,12 @@ class Transport {
   // begin(). WebRTC mints it from signaling; gRPC carries the adoption id.
   virtual const std::string& session_id() const noexcept = 0;
 
-  // Push one frame of captured mic audio (PCM16 mono @ the negotiated rate).
+  // Samples per 20 ms mic frame this transport expects (= rate * 0.02). The
+  // capture rate is transport-dependent: WebRTC/Opus is 48 kHz (960), the gRPC
+  // PCM plane is 16 kHz (320). VoiceSession pulls this many per pump tick.
+  virtual std::size_t mic_frame_samples() const noexcept = 0;
+
+  // Push one frame of captured mic audio (PCM16 mono @ mic_frame_samples()).
   // WebRTC Opus-encodes internally; gRPC sends raw PCM (no on-device encode).
   // Frames pushed before ready() may be dropped (bounded — no backlog).
   virtual void send_mic(const std::int16_t* pcm16, std::size_t samples) = 0;
