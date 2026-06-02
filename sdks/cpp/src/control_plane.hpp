@@ -15,6 +15,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "aivg/sat/satellite.hpp"
 #include "platform/ws_client.hpp"
@@ -38,13 +39,18 @@ class ControlPlane {
   };
 
   ControlPlane(std::string gateway_ws_url, std::string device_id, std::string firmware_version,
-               ReconnectPolicy reconnect, std::uint32_t heartbeat_interval_ms, Callbacks cb);
+               ReconnectPolicy reconnect, std::uint32_t heartbeat_interval_ms, Callbacks cb,
+               std::vector<std::string> transport_capabilities = {});
   ~ControlPlane();
 
   void start();  // connect + register + heartbeat loop + auto-reconnect
   void stop();
   bool is_adopted() const noexcept { return adopted_.load(); }
   bool is_open() const noexcept { return open_.load(); }
+
+  // Feature 022 — the transport the gateway negotiated in the register reply
+  // ("" until registered, or a pre-021 gateway that doesn't negotiate).
+  std::string chosen_transport() const;
 
   // Test/diagnostic counters.
   std::uint32_t heartbeats_sent() const noexcept { return heartbeats_sent_.load(); }
@@ -80,6 +86,9 @@ class ControlPlane {
   std::atomic<std::uint32_t> heartbeats_sent_{0};
   std::atomic<std::uint32_t> registers_sent_{0};
   std::string adoption_state_{"pending"};
+  std::vector<std::string> transport_capabilities_;  // advertised in register (022)
+  mutable std::mutex ct_mu_;                          // guards chosen_transport_
+  std::string chosen_transport_;                      // gateway selection (022)
 };
 
 }  // namespace aivg::sat::detail

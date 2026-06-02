@@ -1,8 +1,10 @@
-// libaivg-sat — voice session (feature 020, T018, internal).
+// libaivg-sat — voice session (feature 020, T018; feature 022 transport seam).
 //
-// Long-lived WebRTC voice session with mute/unmute PTT (FR-010): the
-// PeerConnection is NOT torn down per PTT cycle. Wires the audio callbacks
-// through the Opus bridge to the libpeer transport, and runs signaling.
+// Long-lived voice session with mute/unmute PTT (FR-010): the voice link is
+// NOT torn down per PTT cycle. Feature 022 makes it transport-agnostic — it
+// drives an abstract Transport (WebRTC or gRPC) and decodes downstream audio
+// per the codec the transport reports. Signaling + upstream encode now live
+// inside each Transport, not here.
 #ifndef AIVG_SAT_VOICE_SESSION_HPP
 #define AIVG_SAT_VOICE_SESSION_HPP
 
@@ -12,22 +14,22 @@
 #include <thread>
 
 #include "aivg/sat/audio.hpp"
-#include "transport/libpeer_transport.hpp"
 #include "transport/opus_bridge.hpp"
+#include "transport/transport.hpp"
 
 namespace aivg::sat::detail {
 
 class VoiceSession {
  public:
-  VoiceSession(std::string signaling_base, std::string device_id, AudioInputCallback in,
+  VoiceSession(std::unique_ptr<Transport> transport, AudioInputCallback in,
                AudioOutputCallback out);
   ~VoiceSession();
 
   VoiceSession(const VoiceSession&) = delete;
   VoiceSession& operator=(const VoiceSession&) = delete;
 
-  // Offer -> POST /webrtc/offer -> answer -> pump. Returns true if the
-  // signaling round-trip succeeded (media starts when ICE completes).
+  // Establish the voice link via the transport, then pump the mic. Returns
+  // true if the link came up (media starts when the transport is ready()).
   bool begin();
   void end();
   void mute() { mic_live_.store(false); }
@@ -37,17 +39,21 @@ class VoiceSession {
   bool is_active() const noexcept { return active_.load(); }
   const std::string& session_id() const noexcept { return session_id_; }
 
+  // Forward transport lifecycle events (transcript / speaking / stream-drop) to
+  // the caller, which maps them onto the public SatEvent surface (FR-006/FR-013).
+  // Set after begin() so the callback can carry the now-known session id.
+  void set_on_event(Transport::OnEvent cb) {
+    if (transport_) transport_->set_on_event(std::move(cb));
+  }
+
  private:
   void mic_pump();
-  void on_remote_opus(const std::uint8_t* data, std::size_t size);
+  void on_remote_audio(const std::uint8_t* data, std::size_t size, Codec codec);
 
-  std::string signaling_base_;
-  std::string device_id_;
+  std::unique_ptr<Transport> transport_;
   AudioInputCallback in_;
   AudioOutputCallback out_;
-
-  LibpeerTransport transport_;
-  OpusBridge opus_;
+  OpusBridge opus_;  // DECODE (downstream Opus); upstream encode is in-transport
   std::thread mic_thread_;
   std::atomic<bool> active_{false};
   std::atomic<bool> mic_live_{false};

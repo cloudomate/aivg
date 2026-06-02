@@ -6,6 +6,7 @@
 #include "aivg/sat/satellite.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <future>
 #include <memory>
@@ -13,9 +14,15 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "control_plane.hpp"
+#include "negotiate.hpp"
+#include "transport/webrtc_transport.hpp"
 #include "voice_session.hpp"
+#ifdef AIVG_SAT_HAVE_GRPC
+#include "transport/grpc_transport.hpp"
+#endif
 
 namespace aivg::sat {
 namespace {
@@ -55,6 +62,69 @@ std::string derive_voice_base(const SatelliteOptions& o) {
   return s;
 }
 
+// Transports this build can speak (best-first). satellite.cpp only compiles
+// under the voice plane, so WebRTC is always present; gRPC when compiled in.
+std::vector<std::string> build_transport_caps() {
+  std::vector<std::string> caps;
+#ifdef AIVG_SAT_HAVE_GRPC
+  caps.emplace_back("grpc");  // preferred for native
+#endif
+  caps.emplace_back("webrtc");
+  return caps;
+}
+
+std::string pref_to_pin(TransportPref p) {
+  switch (p) {
+    case TransportPref::Webrtc: return "webrtc";
+    case TransportPref::Grpc:   return "grpc";
+    default:                    return "";  // Auto = negotiate
+  }
+}
+
+#ifdef AIVG_SAT_HAVE_GRPC
+std::string grpc_target(const SatelliteOptions& o) {
+  // "host:grpc_port" derived from the gateway_url authority.
+  std::string s = o.gateway_url;
+  auto scheme = s.find("://");
+  if (scheme != std::string::npos) s = s.substr(scheme + 3);
+  auto slash = s.find('/');
+  if (slash != std::string::npos) s = s.substr(0, slash);
+  auto colon = s.rfind(':');
+  if (colon != std::string::npos) s = s.substr(0, colon);  // strip the mgmt port
+  return s + ":" + std::to_string(o.grpc_port);
+}
+
+std::string mint_session_id(const std::string& device_id) {
+  auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
+  return device_id + "-g" + std::to_string(ns);
+}
+#endif
+
+// Build the voice-plane transport for this session, honouring the operator pin
+// and the gateway's negotiated choice (feature 022 / US3). Returns nullptr and
+// sets `err` if the selection is unsatisfiable (e.g. a pin for a transport this
+// build doesn't have). Centralised so the initial-session and reconnect paths
+// agree.
+std::unique_ptr<detail::Transport> make_voice_transport(const SatelliteOptions& o,
+                                                        const std::string& chosen,
+                                                        std::string& err) {
+  auto choice = detail::choose_transport(build_transport_caps(), pref_to_pin(o.transport), chosen);
+  if (!choice.ok) {
+    err = choice.error;
+    return nullptr;
+  }
+#ifdef AIVG_SAT_HAVE_GRPC
+  if (choice.transport == "grpc") {
+    detail::GrpcTransportOptions g;
+    g.target = grpc_target(o);
+    g.session_id = mint_session_id(o.device_id);
+    g.use_tls = o.grpc_tls;
+    return std::make_unique<detail::GrpcTransport>(std::move(g));
+  }
+#endif
+  return std::make_unique<detail::WebrtcTransport>(derive_voice_base(o), o.device_id);
+}
+
 }  // namespace
 
 struct Satellite::Impl {
@@ -70,6 +140,21 @@ struct Satellite::Impl {
 
   void emit(const SatEvent& ev) {
     if (opts.on_event) opts.on_event(ev);
+  }
+
+  // Feature 022 / T015 — map a voice-transport event onto the public SatEvent
+  // surface (FR-006/FR-013). `sid` is captured per-session at begin time.
+  void on_transport_event(const detail::TransportEvent& te, const std::string& sid) {
+    using K = detail::TransportEvent::Kind;
+    switch (te.kind) {
+      case K::Transcript:      emit(TranscriptDelta{te.text, te.is_final}); break;
+      case K::SpeakingStarted: emit(RemoteStreamEvent{"speaking_started"}); break;
+      case K::SpeakingEnded:   emit(RemoteStreamEvent{"speaking_ended"}); break;
+      case K::VadDetected:     emit(RemoteStreamEvent{"vad_detected"}); break;
+      case K::StreamDropped:
+        emit(VoiceSessionResult{sid, te.reason.empty() ? "dropped" : te.reason});
+        break;
+    }
   }
 };
 
@@ -102,13 +187,25 @@ std::future<void> Satellite::connect() {
     impl_->vs.reset();
     impl_->emit(VoiceSessionResult{prev_sid, "gateway_reconnected"});
 
+    std::string terr;
+    auto transport = make_voice_transport(
+        impl_->opts, impl_->cp ? impl_->cp->chosen_transport() : std::string{}, terr);
+    if (!transport) {
+      impl_->emit(SatError{SatErrorCode::SignalingFailed, terr, std::nullopt});
+      return;
+    }
     auto fresh = std::make_unique<detail::VoiceSession>(
-        derive_voice_base(impl_->opts), impl_->opts.device_id, impl_->opts.audio_input,
-        impl_->opts.audio_output);
+        std::move(transport), impl_->opts.audio_input, impl_->opts.audio_output);
     if (!fresh->begin()) {
       impl_->emit(SatError{SatErrorCode::SignalingFailed,
                            "voice renegotiate after gateway reconnect failed", std::nullopt});
       return;
+    }
+    {
+      const std::string sid = fresh->session_id();
+      auto* ip = impl_.get();
+      fresh->set_on_event(
+          [ip, sid](const detail::TransportEvent& te) { ip->on_transport_event(te, sid); });
     }
     fresh->unmute();
     impl_->state.store(SatelliteState::Listening);
@@ -118,7 +215,8 @@ std::future<void> Satellite::connect() {
 
   impl_->cp = std::make_unique<detail::ControlPlane>(
       control_ws_url(impl_->opts.gateway_url), impl_->opts.device_id,
-      impl_->opts.firmware_version, impl_->opts.reconnect, kDefaultHeartbeatMs, std::move(cb));
+      impl_->opts.firmware_version, impl_->opts.reconnect, kDefaultHeartbeatMs, std::move(cb),
+      build_transport_caps());
   impl_->cp->start();
 
   std::promise<void> p;
@@ -147,13 +245,24 @@ std::future<void> Satellite::beginSession() {
     return p.get_future();
   }
   std::lock_guard<std::mutex> lk(impl_->vs_mu);
-  impl_->vs = std::make_unique<detail::VoiceSession>(derive_voice_base(impl_->opts),
-                                                     impl_->opts.device_id, impl_->opts.audio_input,
-                                                     impl_->opts.audio_output);
+  std::string terr;
+  auto transport = make_voice_transport(
+      impl_->opts, impl_->cp ? impl_->cp->chosen_transport() : std::string{}, terr);
+  if (!transport) {
+    impl_->emit(SatError{SatErrorCode::SignalingFailed, terr, std::nullopt});
+    p.set_value();
+    return p.get_future();
+  }
+  impl_->vs = std::make_unique<detail::VoiceSession>(
+      std::move(transport), impl_->opts.audio_input, impl_->opts.audio_output);
   if (impl_->vs->begin()) {
+    const std::string sid = impl_->vs->session_id();
+    auto* ip = impl_.get();
+    impl_->vs->set_on_event(
+        [ip, sid](const detail::TransportEvent& te) { ip->on_transport_event(te, sid); });
     impl_->vs->unmute();
     impl_->state.store(SatelliteState::Listening);
-    impl_->emit(VoiceSession{impl_->vs->session_id()});
+    impl_->emit(VoiceSession{sid});
   } else {
     impl_->emit(SatError{SatErrorCode::SignalingFailed, "beginSession failed", std::nullopt});
   }

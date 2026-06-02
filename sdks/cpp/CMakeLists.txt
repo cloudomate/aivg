@@ -23,6 +23,7 @@ if(ESP_PLATFORM)
       src/signaling.cpp
       src/transport/opus_bridge.cpp
       src/transport/libpeer_transport.cpp
+      src/transport/webrtc_transport.cpp
       src/voice_session.cpp
       src/satellite.cpp
     INCLUDE_DIRS include
@@ -31,6 +32,12 @@ if(ESP_PLATFORM)
     PRIV_REQUIRES libpeer opus)
   target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
   target_compile_definitions(${COMPONENT_LIB} PRIVATE AIVG_SAT_ENABLE_VOICE=1)
+  # Feature 022 / US2 (T017/FR-010/FR-015): the ESP32-S3 tier stays on WebRTC.
+  # AIVG_SAT_HAVE_GRPC is INTENTIONALLY NOT defined here, and grpc++/protobuf
+  # are NOT in REQUIRES — so satellite.cpp's gRPC branch (#ifdef) is excluded,
+  # build_transport_caps() advertises only ["webrtc"], and the heavy gRPC stack
+  # never enters the constrained build. gRPC on ESP32-S3 is gated on the
+  # measured spike in specs/022-cpp-sdk-grpc-transport/esp32-grpc-spike.md.
   return()
 endif()
 
@@ -102,8 +109,26 @@ if(AIVG_SAT_ENABLE_VOICE)
     src/signaling.cpp
     src/transport/opus_bridge.cpp
     src/transport/libpeer_transport.cpp
+    src/transport/webrtc_transport.cpp
     src/voice_session.cpp
     src/satellite.cpp)
+endif()
+
+# Feature 022 — gRPC voice transport (POSIX/RPi tier). OFF by default. Consumes
+# the canonical proto contract (repo-root proto/) via checked-in generated
+# stubs under src/grpc/_generated/. grpc++/protobuf are CONFINED to this tier
+# (FR-015): the ESP-IDF component returns early above and never sees them.
+option(AIVG_SAT_ENABLE_GRPC "Build the gRPC audio transport" OFF)
+set(AIVG_SAT_HAVE_GRPC OFF)
+if(AIVG_SAT_ENABLE_GRPC)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GRPCPP REQUIRED grpc++)
+  pkg_check_modules(PROTOBUF REQUIRED protobuf)
+  list(APPEND AIVG_SAT_CORE_SOURCES
+    src/transport/grpc_transport.cpp
+    src/grpc/_generated/aivg/satellite/v1/audio.pb.cc
+    src/grpc/_generated/aivg/satellite/v1/audio.grpc.pb.cc)
+  set(AIVG_SAT_HAVE_GRPC ON)
 endif()
 
 add_library(aivg_sat ${AIVG_SAT_CORE_SOURCES})
@@ -120,6 +145,12 @@ if(AIVG_SAT_ENABLE_VOICE)
   target_include_directories(aivg_sat PRIVATE ${AIVG_SAT_LIBPEER_ROOT}/include)
   target_link_libraries(aivg_sat PRIVATE
     ${AIVG_SAT_LIBPEER_ROOT}/build/src/libpeer.a ${OPUS_LIB} ${MBEDCRYPTO_LIB})
+endif()
+if(AIVG_SAT_HAVE_GRPC)
+  target_include_directories(aivg_sat PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
+  target_link_libraries(aivg_sat PRIVATE ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
+  target_compile_definitions(aivg_sat PRIVATE AIVG_SAT_HAVE_GRPC=1)
 endif()
 
 # --- Dependencies (enabled as integration tasks T012-T020 land) --------------
@@ -141,11 +172,51 @@ if(AIVG_SAT_BUILD_TESTS)
   target_include_directories(aivg_sat_test_logic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   add_test(NAME test_logic COMMAND aivg_sat_test_logic)
 
+  # Feature 022 — transport-negotiation logic (pure; no backend deps).
+  add_executable(aivg_sat_test_negotiation tests/test_negotiation.cpp)
+  target_include_directories(aivg_sat_test_negotiation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME test_negotiation COMMAND aivg_sat_test_negotiation)
+
   if(nlohmann_json_FOUND)
     add_executable(aivg_sat_test_proto tests/test_proto.cpp)
     target_link_libraries(aivg_sat_test_proto PRIVATE aivg_sat nlohmann_json::nlohmann_json)
     target_include_directories(aivg_sat_test_proto PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     add_test(NAME test_proto COMMAND aivg_sat_test_proto)
+  endif()
+
+  # Feature 022 — transport-seam test: VoiceSession driven by a FakeTransport.
+  # Hardware-free and libpeer-free (only needs Opus for the decode path), so it
+  # validates the seam refactor independently of the WebRTC/gRPC backends.
+  find_library(SEAM_OPUS_LIB opus)
+  if(SEAM_OPUS_LIB)
+    add_executable(aivg_sat_test_transport_seam
+      tests/test_transport_seam.cpp
+      src/voice_session.cpp
+      src/transport/opus_bridge.cpp)
+    target_include_directories(aivg_sat_test_transport_seam PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(aivg_sat_test_transport_seam PRIVATE ${SEAM_OPUS_LIB} Threads::Threads)
+    add_test(NAME test_transport_seam COMMAND aivg_sat_test_transport_seam)
+  endif()
+
+  # Feature 022 — gRPC transport in-process round-trip test (hardware-free:
+  # a fake Audio.Stream server in the same process). Registered as a ctest.
+  if(AIVG_SAT_HAVE_GRPC)
+    add_executable(aivg_sat_grpc_inproc_test tests/grpc_transport_inproc_test.cpp)
+    target_link_libraries(aivg_sat_grpc_inproc_test PRIVATE
+      aivg_sat ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
+    target_include_directories(aivg_sat_grpc_inproc_test PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated
+      ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
+    add_test(NAME grpc_transport_inproc COMMAND aivg_sat_grpc_inproc_test)
+
+    # Live gRPC audio smoke (needs a running gateway; NOT a ctest — mirrors
+    # ws_register_smoke). Run: grpc_audio_smoke [host:port].
+    add_executable(grpc_audio_smoke tests/grpc_audio_smoke.cpp)
+    target_link_libraries(grpc_audio_smoke PRIVATE aivg_sat ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
+    target_include_directories(grpc_audio_smoke PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated
+      ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
   endif()
 
   # Live control-plane smoke (needs a running gateway; not registered as a
