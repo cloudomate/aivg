@@ -1,8 +1,11 @@
 # Follow-up: generalize Constitution Principle III to be transport-neutral
 
-**Status**: proposed amendment — recorded here as the governance follow-up for
-feature 021's recorded Principle III deviation (plan.md Complexity Tracking,
-research R-7). Not yet ratified.
+**Status**: ✅ **RATIFIED in constitution v2.1.0** (2026-06-02). This document
+is the governance follow-up for feature 021's recorded Principle III deviation
+(plan.md Complexity Tracking, research R-7). Adopted as a **MINOR** bump (the
+draft below proposed PATCH; on review MINOR was adopted because the change
+materially expands Principle III's normative scope to a new transport class —
+see the constitution's Sync Impact Report for the rationale).
 
 ## Why
 

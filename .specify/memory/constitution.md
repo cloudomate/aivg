@@ -1,6 +1,44 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 2.0.1 → 2.1.0
+Bump rationale: MINOR. Principle III ("Separate Control and Voice
+  Connections") is generalized from naming two specific technologies
+  (control WebSocket + WebRTC voice connection) to a transport-neutral
+  invariant: exactly two connections — a durable control connection and a
+  per-session voice connection — kept separate, realized by WebSocket+WebRTC
+  for browsers/legacy native and by the gRPC `Management` service +
+  `Audio.Stream` for native satellites (feature 021). No existing compliance
+  is broken (WebRTC/WS satellites remain compliant; no rule removed or
+  inverted), so this is not MAJOR; it materially expands the principle's
+  normative scope to a new transport class, so it is more than a PATCH. This
+  formally lands feature 021's recorded Principle III deviation
+  (`specs/021-grpc-satellite-transport/followup-principle-iii-amendment.md`).
+
+Modified principles:
+  - III. Separate Control and Voice Connections — binding text broadened to be
+    transport-neutral; all separation invariants preserved verbatim in intent.
+  Other principles (I, II, IV, V): unchanged. (II still references "control
+  WS" as an illustrative surface name, not normative wire — left as-is.)
+
+Added / removed sections: none.
+
+Templates / artifacts status:
+  - .specify/templates/plan-template.md ✅ unchanged (Constitution Check text
+    is generic; no hardcoded WebRTC/transport naming).
+  - .specify/templates/spec-template.md ✅ unchanged.
+  - .specify/templates/tasks-template.md ✅ unchanged.
+  - Hardware & Platform Constraints / Development Workflow sections ✅ unchanged
+    — they describe the WebRTC hardware tiers specifically and remain accurate.
+  - specs/021-grpc-satellite-transport/followup-principle-iii-amendment.md
+    ✅ marked RATIFIED at v2.1.0 (the draft had proposed PATCH; MINOR adopted
+    on review per the rationale above).
+
+Follow-up TODOs: none.
+
+------------------------------------------------------------------
+SYNC IMPACT REPORT (previous)
+==================
 Version change: 2.0.0 → 2.0.1
 Bump rationale: PATCH. Branding rebrand only — the product is renamed
   from "Hermes Voice" to AIVG (AI Voice Gateway). Hermes remains the v1
@@ -142,26 +180,42 @@ principle prevents.
 
 ### III. Separate Control and Voice Connections
 
-Each satellite maintains exactly two connections: an always-on control-plane
-WebSocket (`WS /satellite/ws`) and a per-session WebRTC voice connection.
+Each satellite maintains exactly two logical connections, kept separate: an
+always-on **control-plane connection** and a **per-session voice connection**.
+The transport that realizes each is satellite-type-dependent — browsers and
+legacy native devices use a control WebSocket (`WS /satellite/ws`) + a WebRTC
+voice connection; native satellites on the gRPC transport (feature 021) use the
+long-lived `aivg.satellite.v1.Management` service + a per-session
+`aivg.satellite.v1.Audio.Stream`. The binding invariants below hold for EVERY
+transport — it is the *separation*, not the specific wire, that is normative.
 
 Rules:
 
-- The control plane MUST stay available when there is no active call
-  (register, heartbeat, config push, commands, logs, OTA, online/offline).
-- Durable control traffic MUST NOT be multiplexed into a WebRTC data channel,
-  because a data channel only exists while a PeerConnection is up.
-- A single SCTP datachannel on the voice PeerConnection is permitted ONLY for
-  call-scoped, low-latency UI events (partial transcripts, listening/speaking
-  state, barge-in). Everything durable stays on the WS.
-- The satellite is the WebRTC offerer for all device types. ICE uses full
-  gather-then-offer; `/webrtc/candidate` is kept only as a fallback.
+- Exactly two connections per satellite: one always-on control connection and
+  one per-session voice connection. The control connection MUST stay available
+  when there is no active call (register, heartbeat, config push, commands,
+  logs, OTA, online/offline).
+- Durable control traffic MUST NOT be multiplexed into the per-session voice
+  connection (a WebRTC data channel, or the gRPC `Audio.Stream`), because that
+  channel exists only while a call is up.
+- Call-scoped, low-latency UI events (partial transcripts, listening/speaking
+  state, barge-in) MAY ride the voice connection — a single SCTP datachannel on
+  the WebRTC PeerConnection, or `ServerFrame` events on the gRPC `Audio.Stream`.
+  Everything durable stays on the control connection.
+- WebRTC-transport realization: the satellite is the offerer for all device
+  types; ICE uses full gather-then-offer; `/webrtc/candidate` is kept only as a
+  fallback. The gRPC transport has no offer/ICE step — a dropped voice stream is
+  re-established as a new `Audio.Stream`, never renegotiated.
 - Operator surfaces (CLI, agent-platform skill, optional UI) use a **REST
   API** for actions; SSE/WebSocket is permitted **only** for live log
   tailing and OTA-progress streaming consumed by the CLI's follow mode.
 
 Rationale: Coupling control availability to call state breaks online/offline
-tracking, config push, and "start a call" — wrong for a satellite.
+tracking, config push, and "start a call" — wrong for a satellite. The
+invariant is transport-neutral: a durable control connection separated from a
+disposable per-session voice connection, regardless of wire (WebSocket/WebRTC
+or gRPC `Management`/`Audio.Stream`). This generalization lands feature 021's
+recorded Principle III deviation.
 
 ### IV. Reuse the Upstream Agent Platform, Don't Rebuild Its Primitives
 
@@ -298,4 +352,4 @@ Compliance review:
   against the binding constraint that requires it; unjustified violations
   block the change.
 
-**Version**: 2.0.1 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-20
+**Version**: 2.1.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-06-02

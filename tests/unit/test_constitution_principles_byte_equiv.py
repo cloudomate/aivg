@@ -1,14 +1,18 @@
-"""Feature 012 T034 — constitution Principle byte-equivalence.
+"""Feature 012 T034 — constitution Principle byte-equivalence drift guard.
 
-The AIVG rebrand is a **PATCH** amendment (v2.0.0 → v2.0.1): Principle
-text MUST be byte-equivalent modulo product-name strings. Drift here
-means the rebrand accidentally rewrote normative content, which is a
-separate amendment and must not hide inside this feature's diff.
+Principle text MUST be byte-equivalent (modulo product-name strings) to the
+blessed fixture at ``tests/fixtures/constitution_principles_normalized.md``.
+Drift means normative content changed; that is only legitimate alongside an
+intentional, version-bumped amendment that re-blesses the fixture.
 
-The fixture at ``tests/fixtures/constitution_principles_normalized.md``
-holds the Principle region with both product-name spellings replaced by
-``__PRODUCT__``. This test extracts the same region from the live
-constitution, applies the same substitution, and diffs.
+Baseline history: the fixture was first blessed at the AIVG rebrand (v2.0.1,
+a PATCH that changed only product-name strings) and re-blessed at **v2.1.0**,
+the MINOR amendment that generalized Principle III to be transport-neutral
+(feature 021; gRPC `Management`/`Audio.Stream` realize the same two-connection
+separation as WebSocket/WebRTC).
+
+This test extracts the Principle region from the live constitution, applies
+the same ``__PRODUCT__`` substitution, and diffs against the fixture.
 """
 
 from __future__ import annotations
@@ -59,24 +63,24 @@ def test_principles_byte_equivalent_to_fixture():
         difflib.unified_diff(
             fixture.splitlines(),
             current.splitlines(),
-            fromfile="fixture (v2.0.1 baseline, normalized)",
+            fromfile="fixture (v2.1.0 baseline, normalized)",
             tofile="current constitution (normalized)",
             lineterm="",
         )
     )
     raise AssertionError(
-        "Principle text drifted vs the byte-equivalence fixture. "
-        "The AIVG rebrand (PATCH amendment) is forbidden from changing "
-        "normative content. If the change is intentional, re-bless the "
-        "fixture and bump the constitution version (MINOR/MAJOR per the "
-        "governance rule).\n\n" + diff
+        "Principle text drifted vs the byte-equivalence fixture. Normative "
+        "constitution content must not change silently. If the change is "
+        "intentional, re-bless the fixture and bump the constitution version "
+        "(MINOR/MAJOR per the governance rule).\n\n" + diff
     )
 
 
-def test_constitution_version_is_2_0_1():
+def test_constitution_version_is_2_1_0():
     """Sanity guard so a contributor doesn't bump Principle text without
     bumping the constitution version (or vice versa)."""
     text = CONSTITUTION.read_text()
-    assert "**Version**: 2.0.1" in text, (
-        "constitution footer must declare Version 2.0.1 after the AIVG rebrand"
+    assert "**Version**: 2.1.0" in text, (
+        "constitution footer must declare Version 2.1.0 after the feature-021 "
+        "Principle III transport-neutrality amendment"
     )
