@@ -57,6 +57,8 @@ class Registry:
         ip_address: str = "",
         config: SatelliteConfig | None = None,
         factory_reset: bool = False,
+        transport_capabilities: "list | None" = None,
+        transport_pin: "str | None" = None,
     ) -> ConnectedClient:
         """Backwards-compatible register.
 
@@ -89,6 +91,19 @@ class Registry:
             client.config = config
         client.status = ClientStatus.ONLINE
         client.last_error = None
+        # Feature 021 / US3 — capability-based transport negotiation. Only
+        # touch the transport when the device actually advertises something
+        # (or an operator pinned it); a legacy register with no capabilities
+        # leaves the existing transport untouched (back-compat, FR-016/018).
+        if transport_capabilities is not None or transport_pin is not None:
+            from .transports import SUPPORTED_TRANSPORTS, select_transport  # noqa: WPS433
+            client.transport_capabilities = list(transport_capabilities or [])
+            client.transport_pin = transport_pin
+            client.transport = select_transport(
+                client.transport_capabilities,
+                supported=SUPPORTED_TRANSPORTS,
+                pin=transport_pin,
+            )
         client.touch()
         self._flush_queued_writes(client)  # apply any offline-queued config (US3)
         self._persist()

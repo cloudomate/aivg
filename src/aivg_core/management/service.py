@@ -62,8 +62,18 @@ class ManagementService:
         firmware_version = body.get("firmware_version", "")
         ip_address = body.get("ip_address", "")
         factory_reset = bool(body.get("factory_reset", False))
+        # Feature 021 / US3 — capability-based transport negotiation. A device
+        # advertises which transports it can speak (best-first); an operator
+        # MAY pin one. Absent on pre-021 clients → no negotiation (back-compat).
+        transport_capabilities = body.get("transport_capabilities")
+        transport_pin = body.get("transport_pin")
+
+        # Surface an unsatisfiable transport pin as a clear, actionable error
+        # rather than a silent fallback (FR-017).
+        from ..transports import UnsatisfiableTransportPin  # noqa: WPS433
 
         adoption_state: str
+        chosen_transport: "str | None" = None
         if factory_reset and self._reg.get_client(device_id) is not None:
             # Adopted → demote back to pending; drop persisted config.
             self._reg.demote_to_pending(
@@ -72,16 +82,22 @@ class ManagementService:
             )
             adoption_state = "pending"
         elif self._cfg.auto_adopt_on_register and not factory_reset:
-            client = self._reg.register(
-                device_id=device_id,
-                device_type=device_type,
-                firmware_version=firmware_version,
-                ip_address=ip_address,
-                config=SatelliteConfig(**self._cfg.default_config)
-                if self._cfg.default_config
-                else SatelliteConfig(),
-            )
+            try:
+                client = self._reg.register(
+                    device_id=device_id,
+                    device_type=device_type,
+                    firmware_version=firmware_version,
+                    ip_address=ip_address,
+                    config=SatelliteConfig(**self._cfg.default_config)
+                    if self._cfg.default_config
+                    else SatelliteConfig(),
+                    transport_capabilities=transport_capabilities,
+                    transport_pin=transport_pin,
+                )
+            except UnsatisfiableTransportPin as exc:
+                return {"error": "unsatisfiable_transport_pin", "detail": str(exc)}
             adoption_state = client.adoption_state.value
+            chosen_transport = client.transport
         else:
             # auto_adopt_on_register=False OR factory_reset on an
             # unknown / pending device id.
@@ -115,12 +131,17 @@ class ManagementService:
                 "adoption_state": adoption_state,
             }
         )
-        return {
+        resp = {
             "session_token": f"st-{device_id}-{int(time.time())}",  # reserved; auth deferred
             "management_server_url": f"http://0.0.0.0:{self._cfg.management_port}",
             "default_config": self._cfg.default_config,
             "adoption_state": adoption_state,
         }
+        # Feature 021 / FR-015 — tell the device which transport the gateway
+        # selected, so it knows whether to open a gRPC or WebRTC voice plane.
+        if chosen_transport is not None:
+            resp["chosen_transport"] = chosen_transport
+        return resp
 
     # --- adoption (feature 011 US2) -------------------------------------
     def adopt(

@@ -130,15 +130,15 @@ a client advertising `["grpc","webrtc"]` gets gRPC; a WebRTC-only client gets We
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T034 [P] [US3] Integration test `tests/integration/test_grpc_transport_negotiation.py` — capability negotiation, browser stays WebRTC, legacy esphome/WebRTC natives unaffected, operator pin honored / unsatisfiable pin errors (acceptance scenarios 1–4).
+- [X] T034 [P] [US3] Integration test `tests/integration/test_grpc_transport_negotiation.py` — capability negotiation, browser stays WebRTC, legacy esphome/WebRTC natives unaffected, operator pin honored / unsatisfiable pin errors (acceptance scenarios 1–4).
 
 ### Implementation for User Story 3
 
-- [ ] T035 [US3] Accept `transport_capabilities` in the adoption/registration flow (`src/aivg_core/management/service.py` + `registry.py`) and persist on `ConnectedClient` (FR-015).
-- [ ] T036 [US3] Implement the gateway transport-selection rule (prefer `grpc` for native, `webrtc` for browser) as a small pure helper (e.g. `src/aivg_core/transports/__init__.py` `select_transport(capabilities, pin, supported)`); set the chosen `transport` at adoption (R-5).
-- [ ] T037 [US3] Implement `transport_pin` override and a clear, actionable error when a pin cannot be satisfied (FR-017).
-- [ ] T038 [US3] Add `"grpc"` to `SUPPORTED_TRANSPORTS` in `src/aivg_cli/cli.py` and bump the `contract_version` envelope `0.2.0` → `0.3.0` (additive minor, gated on opt-in advertising the transport) (R-8).
-- [ ] T039 [US3] Regression guard in `tests/integration/test_grpc_transport_negotiation.py`: confirm browser (WebRTC) + existing esphome + legacy WebRTC native paths are unchanged when gRPC is enabled (FR-016/FR-018).
+- [X] T035 [US3] Accept `transport_capabilities` in the adoption/registration flow (`src/aivg_core/management/service.py` + `registry.py`) and persist on `ConnectedClient` (FR-015).
+- [X] T036 [US3] Implement the gateway transport-selection rule (prefer `grpc` for native, `webrtc` for browser) as a small pure helper (e.g. `src/aivg_core/transports/__init__.py` `select_transport(capabilities, pin, supported)`); set the chosen `transport` at adoption (R-5).
+- [X] T037 [US3] Implement `transport_pin` override and a clear, actionable error when a pin cannot be satisfied (FR-017).
+- [X] T038 [US3] Add `"grpc"` to `SUPPORTED_TRANSPORTS` in `src/aivg_cli/cli.py` and bump the `contract_version` envelope `0.2.0` → `0.3.0` (additive minor, gated on opt-in advertising the transport) (R-8).
+- [X] T039 [US3] Regression guard in `tests/integration/test_grpc_transport_negotiation.py`: confirm browser (WebRTC) + existing esphome + legacy WebRTC native paths are unchanged when gRPC is enabled (FR-016/FR-018).
 
 **Checkpoint**: All three stories independently functional; mixed fleet safe.
 
