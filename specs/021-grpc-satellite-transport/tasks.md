@@ -105,16 +105,16 @@ register → adopt → report state → receive command, WS disabled.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T027 [P] [US2] Integration test `tests/integration/test_management_grpc.py` — full management lifecycle over gRPC with `/satellite/ws` disabled (acceptance scenarios 1–3).
-- [ ] T028 [P] [US2] Contract test additions in `tests/contract/test_grpc_contract.py` — `Management` service shape + that its `state_update`/`config_changed`/`command` semantics equal the WebSocket message set (FR-014).
+- [X] T027 [P] [US2] Integration test `tests/integration/test_management_grpc.py` — full management lifecycle over gRPC with `/satellite/ws` disabled (acceptance scenarios 1–3).
+- [X] T028 [P] [US2] Contract test additions in `tests/contract/test_grpc_contract.py` — `Management` service shape + that its `state_update`/`config_changed`/`command` semantics equal the WebSocket message set (FR-014).
 
 ### Implementation for User Story 2
 
-- [ ] T029 [US2] Implement `GrpcManagementService` servicer in `src/aivg_core/transports/grpc/management_service.py`: `Register` + bidi `Control` (stream `StateUpdate` ↔ stream `ControlMessage`).
-- [ ] T030 [US2] Bridge `Control` messages to the existing `ManagementService` (`src/aivg_core/management/service.py`) methods — register/heartbeat/state/config_changed/command — reusing them verbatim so observable semantics are identical (FR-014); no new control semantics.
-- [ ] T031 [US2] Map `TurnEvent{WAKE_FIRED/END_OF_UTTERANCE}` to precise session-start signalling and the session id that keys `Audio.Stream` (FR-012/FR-006).
-- [ ] T032 [US2] Mount the `Management` servicer in `server.py` as a SEPARATE long-lived service from `Audio.Stream` (Constitution III intent: durable control never multiplexed into the per-session audio stream); add a config switch to disable `/satellite/ws` for native devices.
-- [ ] T033 [US2] Ensure `Management` is reflection-introspectable (`grpcurl describe`) for diagnosability (FR-013).
+- [X] T029 [US2] Implement `GrpcManagementService` servicer in `src/aivg_core/transports/grpc/management_service.py`: `Register` + bidi `Control` (stream `StateUpdate` ↔ stream `ControlMessage`).
+- [X] T030 [US2] Bridge `Control` messages to the existing `ManagementService` (`src/aivg_core/management/service.py`) methods — register/heartbeat/state/config_changed/command — reusing them verbatim so observable semantics are identical (FR-014); no new control semantics.
+- [X] T031 [US2] Map `TurnEvent{WAKE_FIRED/END_OF_UTTERANCE}` to precise session-start signalling and the session id that keys `Audio.Stream` (FR-012/FR-006).
+- [X] T032 [US2] Mount the `Management` servicer in `server.py` as a SEPARATE long-lived service from `Audio.Stream` (Constitution III intent: durable control never multiplexed into the per-session audio stream); add a config switch to disable `/satellite/ws` for native devices.
+- [X] T033 [US2] Ensure `Management` is reflection-introspectable (`grpcurl describe`) for diagnosability (FR-013).
 
 **Checkpoint**: US1 + US2 both work; native satellites can run single-transport.
 

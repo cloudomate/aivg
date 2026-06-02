@@ -15,10 +15,11 @@ from typing import Callable, Optional, TYPE_CHECKING
 import grpc
 
 from ...logsink import LogSink
-from ._generated import audio_pb2, audio_pb2_grpc
+from ._generated import audio_pb2, audio_pb2_grpc, management_pb2, management_pb2_grpc
 from .stream_handler import serve_stream
 
 if TYPE_CHECKING:
+    from ...management.service import ManagementService
     from ...platforms.base import AgentPlatform
     from ...registry import Registry
 
@@ -59,6 +60,8 @@ class GrpcAudioTransport:
         downstream_codec: str = "pcm",
         api_key_file: str = "~/.aivg/devices/keys.json",
         ui_broadcast: Optional[Callable[[dict], None]] = None,
+        management_service: "Optional[ManagementService]" = None,
+        mount_management: bool = False,
     ) -> None:
         self._registry = registry
         self._platform = platform
@@ -69,6 +72,8 @@ class GrpcAudioTransport:
         self._downstream_codec = downstream_codec
         self._api_key_file = api_key_file
         self._ui_broadcast = ui_broadcast
+        self._management_service = management_service
+        self._mount_management = mount_management and management_service is not None
         self._server: Optional[grpc.aio.Server] = None
 
     async def start(self) -> None:
@@ -76,6 +81,19 @@ class GrpcAudioTransport:
             return  # already started
         server = grpc.aio.server()
         audio_pb2_grpc.add_AudioServicer_to_server(_AudioServicer(self), server)
+        # Feature 021 / US2 — optionally host the management/control plane over
+        # gRPC as a SEPARATE long-lived service (Constitution III intent).
+        if self._mount_management:
+            from .management_service import GrpcManagementService  # noqa: WPS433
+
+            management_pb2_grpc.add_ManagementServicer_to_server(
+                GrpcManagementService(
+                    service=self._management_service,
+                    registry=self._registry,
+                    sink=self._sink,
+                ),
+                server,
+            )
         self._enable_reflection(server)
 
         addr = f"{self._host}:{self._port}"
@@ -104,11 +122,15 @@ class GrpcAudioTransport:
         try:
             from grpc_reflection.v1alpha import reflection  # noqa: WPS433
 
-            names = (
+            names = [
                 audio_pb2.DESCRIPTOR.services_by_name["Audio"].full_name,
                 reflection.SERVICE_NAME,
-            )
-            reflection.enable_server_reflection(names, server)
+            ]
+            if self._mount_management:
+                names.append(
+                    management_pb2.DESCRIPTOR.services_by_name["Management"].full_name
+                )
+            reflection.enable_server_reflection(tuple(names), server)
         except Exception:  # noqa: BLE001
             _LOG.debug("grpc: server reflection unavailable (grpcio-reflection missing)")
 

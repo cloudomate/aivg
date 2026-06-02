@@ -76,6 +76,12 @@ class GrpcTransportConfig:
     tls: str = "insecure"           # "insecure" | "mtls"
     downstream_codec: str = "pcm"   # "pcm" | "opus"
     api_key_file: str = "~/.aivg/devices/keys.json"
+    # Feature 021 / US2 — also host the management/control plane over gRPC
+    # (the `aivg.satellite.v1.Management` service), so a native satellite can
+    # do its whole lifecycle without the `/satellite/ws` WebSocket. Off by
+    # default; the WebSocket stays up regardless (browsers/legacy natives
+    # keep using it — coexistence).
+    management_over_grpc: bool = False
 
 
 @dataclass
@@ -154,6 +160,7 @@ class SatelliteAdapterConfig:
                 api_key_file=str(grpc_block.get(
                     "api_key_file", "~/.aivg/devices/keys.json"
                 )),
+                management_over_grpc=bool(grpc_block.get("management_over_grpc", False)),
             ),
         )
         cfg = SatelliteAdapterConfig(

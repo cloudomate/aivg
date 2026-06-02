@@ -183,6 +183,10 @@ class AivgSatelliteAdapter:
                 downstream_codec=grpc_cfg.downstream_codec,
                 api_key_file=grpc_cfg.api_key_file,
                 ui_broadcast=self.management._broadcast,
+                # US2 — optionally also serve the management/control plane over
+                # gRPC (the WebSocket stays up for browsers/legacy natives).
+                management_service=self.management,
+                mount_management=grpc_cfg.management_over_grpc,
             )
             await self._grpc_transport.start()
 
