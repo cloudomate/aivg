@@ -146,12 +146,12 @@ a client advertising `["grpc","webrtc"]` gets gRPC; a WebRTC-only client gets We
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T040 [P] Documentation: add the gRPC transport + `transports.grpc` config block to `README.md`/`docs/` and reference `proto/aivg/satellite/v1/` as the shared contract.
-- [ ] T041 [P] Update `CHANGELOG.md` with the gRPC transport entry (Phase 1 audio plane; note the `0.3.0` contract-envelope bump on opt-in).
-- [ ] T042 Run the `quickstart.md` validation end-to-end (steps 1–6) against the echo platform.
-- [ ] T043 Constitution Principle V gate: document the **≥7-day real-hardware soak** (RPi Zero 2 W class) checklist required before defaulting native satellites to `grpc` (SC-004); this cannot run in CI — record as a release gate.
-- [ ] T044 Governance follow-up: open the recommended **constitution amendment** generalizing Principle III to be transport-neutral (per plan Complexity Tracking + research R-7); link from `plan.md`.
-- [ ] T045 [P] Optionally advertise the gRPC audio port over mDNS alongside the existing management/webrtc advertisement (parity with `mdns_advertise`).
+- [X] T040 [P] Documentation: add the gRPC transport + `transports.grpc` config block to `README.md`/`docs/` and reference `proto/aivg/satellite/v1/` as the shared contract.
+- [X] T041 [P] Update `CHANGELOG.md` with the gRPC transport entry (Phase 1 audio plane; note the `0.3.0` contract-envelope bump on opt-in).
+- [X] T042 Run the `quickstart.md` validation end-to-end (steps 1–6) against the echo platform.
+- [X] T043 Constitution Principle V gate: document the **≥7-day real-hardware soak** (RPi Zero 2 W class) checklist required before defaulting native satellites to `grpc` (SC-004); this cannot run in CI — record as a release gate.
+- [X] T044 Governance follow-up: open the recommended **constitution amendment** generalizing Principle III to be transport-neutral (per plan Complexity Tracking + research R-7); link from `plan.md`.
+- [~] T045 [P] Optionally advertise the gRPC audio port over mDNS — **DEFERRED**: there is no gateway-side mDNS advertiser today (`mdns_advertise` is only a config-block placeholder; zeroconf is used client-side for ESPHome discovery). Adding one is net-new infrastructure, out of scope for this optional polish task. Revisit if/when a gateway mDNS advertiser lands.
 
 ---
 

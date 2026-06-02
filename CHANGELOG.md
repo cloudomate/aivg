@@ -1,5 +1,54 @@
 # Changelog
 
+## [Unreleased] — Feature 021: gRPC satellite transport
+
+Adds a **gRPC bidirectional-streaming transport** for native satellites as an
+additive sibling under `aivg_core.transports.grpc/` (mirrors the feature-017
+ESPHome transport pattern). Off by default; WebRTC stays for browser
+satellites and existing native deployments — transport is chosen by capability
+negotiation, no flag-day.
+
+### Added
+
+- **gRPC audio plane** (`aivg.satellite.v1.Audio`). One bidi `Audio.Stream`
+  per voice session: mic PCM up; synthesized audio + streaming transcripts +
+  turn events down on the same stream. Reuses the canonical `Session` /
+  `AgentPlatform` seam verbatim — no ICE/DTLS/SCTP to stall (closes the
+  "stuck connecting" failure class). Reconnect opens a fresh stream rather
+  than renegotiating a peer connection.
+- **gRPC management plane** (`aivg.satellite.v1.Management`, opt-in via
+  `transports.grpc.management_over_grpc`). A native satellite can run its whole
+  lifecycle — register/adopt, heartbeat, state, control — over gRPC without the
+  `/satellite/ws` WebSocket. Kept as a separate long-lived service from
+  `Audio.Stream`; reuses `ManagementService` and its broadcast fan-out verbatim
+  (identical control semantics).
+- **Capability-based transport negotiation.** Satellites advertise
+  `transport_capabilities`; the gateway selects the best mutually-supported
+  transport (prefers gRPC for native, WebRTC for browser) with no `device_type`
+  branching. Operators can pin a transport; an unsatisfiable pin is a clear
+  error. Browser/legacy WebRTC and ESPHome satellites are unaffected.
+- **Canonical wire contract** at `proto/aivg/satellite/v1/{audio,management}.proto`
+  (single source of truth, vendored by the `aivg-devices` C++ client);
+  checked-in Python stubs via `scripts/gen_proto.sh`. Server reflection enabled
+  for `grpcurl` diagnosability.
+- New runtime deps: `grpcio`, `grpcio-reflection`, `protobuf` (`grpcio-tools`
+  for codegen, dev only).
+
+### Changed
+
+- **Wire-contract envelope bumped `0.2.0` → `0.3.0`** (additive minor): the
+  build now advertises a third transport (`grpc`) alongside `webrtc` +
+  `esphome_api`. Existing `0.2.0` WebRTC/ESPHome clients are unaffected. The
+  `@aivg/sat-sdk` (TypeScript) bump to match is a separate, coordinated SDK
+  release.
+
+### Notes
+
+- **Deferred:** Opus downstream encoding (PCM is the working default; Opus
+  selection degrades to PCM until an encoder lands) and full mTLS cert plumbing
+  (insecure-LAN works; mTLS refuses to silently downgrade). Defaulting native
+  satellites to gRPC is gated on a ≥7-day real-hardware soak (Constitution V).
+
 ## [0.2.2] — 2026-06-01 — WebRTC renegotiate after gateway restart + TTS text filter
 
 Small follow-on to `0.2.1`. No wire-contract changes; drop-in.

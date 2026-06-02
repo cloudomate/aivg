@@ -41,7 +41,7 @@ Repo: <https://github.com/cloudomate/aivg> · Changelog:
 
 ```bash
 pip install -e .          # picks up the renamed entry point
-aivg --version            # JSON envelope, contract_version 1.0.0
+aivg --version            # JSON envelope, contract_version 0.3.0
 aivg list                 # see the fleet
 aivg device get kitchen   # full state of one device
 aivg logs kitchen --follow
@@ -54,13 +54,50 @@ aivg onboard --ssid "MyWiFi" --password "..." --name "bedroom"
 src/aivg_core/           # platform-neutral management plane
   platforms/hermes/        # v1 Hermes plugin (Hermes-platform agent skill, bridge)
   platforms/openclaw/      # planned plugin (stub)
-  webrtc/                  # voice plane
+  webrtc/                  # voice plane (WebRTC)
+  transports/              # additive non-WebRTC transports
+    esphome/                 # ESPHome native API (feature 017)
+    grpc/                    # gRPC bidi streaming (feature 021)
   management/              # App. A REST + SSE + control WS
 src/aivg_cli/            # `aivg` Typer CLI
+proto/                   # canonical cross-language wire schemas (gRPC transport)
 skills/hermes-agent/     # Hermes-platform agent skill (invokes `aivg` CLI)
-specs/                   # Spec Kit features 001–012
+specs/                   # Spec Kit features 001–021
 docs/                    # design notes, data-dir reference, rebrand allow-list
 ```
+
+## Transports
+
+A satellite's audio plane can run over any of three transports; the gateway
+selects the best one each satellite advertises (no flag-day, no per-device
+branching):
+
+| Transport | For | Notes |
+|---|---|---|
+| **WebRTC** | browser-tab satellites; legacy native | Opus, ICE/DTLS/SRTP. The only option a browser can open. |
+| **ESPHome native API** | ESPHome voice devices (feature 017) | Additive; off by default. |
+| **gRPC** | native satellites — RPi/ESP32 class (feature 021) | Bidi `Audio.Stream` (mic up, audio+transcripts+events down); optional `Management` service for the control plane. No ICE/DTLS to stall. |
+
+The gRPC transport is **off by default**. Opt in via the `satellite:` block in
+`~/.hermes/config.yaml`:
+
+```yaml
+satellite:
+  enabled: true
+  transports:
+    grpc:
+      enabled: true
+      port: 8645              # audio plane (distinct from management 8643 / webrtc 8644)
+      tls: insecure           # trusted-LAN default; "mtls" for fleet
+      downstream_codec: pcm   # or "opus"
+      management_over_grpc: false   # true => also serve the control plane over gRPC
+```
+
+The canonical wire schema lives at
+[`proto/aivg/satellite/v1/`](proto/aivg/satellite/v1/) — the single source of
+truth shared by the Python gateway and native C++ clients (in the companion
+[`aivg-devices`](https://github.com/cloudomate/aivg-devices) repo). Regenerate
+the Python stubs with `scripts/gen_proto.sh`.
 
 ## Hermes vs AIVG
 
