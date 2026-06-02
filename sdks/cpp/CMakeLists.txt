@@ -23,6 +23,7 @@ if(ESP_PLATFORM)
       src/signaling.cpp
       src/transport/opus_bridge.cpp
       src/transport/libpeer_transport.cpp
+      src/transport/webrtc_transport.cpp
       src/voice_session.cpp
       src/satellite.cpp
     INCLUDE_DIRS include
@@ -31,6 +32,12 @@ if(ESP_PLATFORM)
     PRIV_REQUIRES libpeer opus)
   target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
   target_compile_definitions(${COMPONENT_LIB} PRIVATE AIVG_SAT_ENABLE_VOICE=1)
+  # Feature 022 / US2 (T017/FR-010/FR-015): the ESP32-S3 tier stays on WebRTC.
+  # AIVG_SAT_HAVE_GRPC is INTENTIONALLY NOT defined here, and grpc++/protobuf
+  # are NOT in REQUIRES — so satellite.cpp's gRPC branch (#ifdef) is excluded,
+  # build_transport_caps() advertises only ["webrtc"], and the heavy gRPC stack
+  # never enters the constrained build. gRPC on ESP32-S3 is gated on the
+  # measured spike in specs/022-cpp-sdk-grpc-transport/esp32-grpc-spike.md.
   return()
 endif()
 

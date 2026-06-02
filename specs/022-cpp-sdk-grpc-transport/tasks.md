@@ -93,8 +93,8 @@ unmeasured guess (Constitution V).
 PSRAM/heap-under-full-pipeline numbers that fits and completes an on-device turn,
 **or** a measurement-backed decision record keeping ESP32-S3 on WebRTC.
 
-- [ ] T017 [US2] Confirm the ESP32-S3 build advertises **only** `["webrtc"]` (no `grpc` capability) and that grpc++/protobuf are never linked into the ESP-IDF component — verify `sdks/cpp/idf_component.yml` + the `if(ESP_PLATFORM)` CMake branch (FR-010/FR-015).
-- [ ] T018 [US2] Author the spike plan + decision record `specs/022-cpp-sdk-grpc-transport/esp32-grpc-spike.md`: the candidate path (nanopb + minimal HTTP/2 framing), the acceptance bar (fits flash partition + PSRAM/heap headroom under the full pipeline + a completed on-device turn), and how each is measured (FR-008).
+- [X] T017 [US2] Confirm the ESP32-S3 build advertises **only** `["webrtc"]` (no `grpc` capability) and that grpc++/protobuf are never linked into the ESP-IDF component — verify `sdks/cpp/idf_component.yml` + the `if(ESP_PLATFORM)` CMake branch (FR-010/FR-015).
+- [X] T018 [US2] Author the spike plan + decision record `specs/022-cpp-sdk-grpc-transport/esp32-grpc-spike.md`: the candidate path (nanopb + minimal HTTP/2 framing), the acceptance bar (fits flash partition + PSRAM/heap headroom under the full pipeline + a completed on-device turn), and how each is measured (FR-008).
 - [ ] T019 [US2] Execute the spike (on real ESP32-S3 hardware): produce either a fitting gRPC build with recorded measurements + an on-device turn, **or** a measurement-backed WebRTC-stays decision; record numbers in `esp32-grpc-spike.md` (FR-009/SC-006). *(Hardware task — gated, may run after US1 lands.)*
 
 **Checkpoint**: ESP32-S3 tier has an evidence-backed transport decision.
@@ -128,11 +128,11 @@ is served WebRTC; an existing feature-020 integration builds with no source chan
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T026 [P] Document the gRPC transport in `sdks/cpp/docs/api.md` — `AIVG_SAT_ENABLE_GRPC`, the new options, and `proto/aivg/satellite/v1/` as the consumed contract.
-- [ ] T027 [P] Add a CHANGELOG / version note for the C++ SDK (gRPC transport; consumes the `0.3.0` contract envelope; RPi-tier-first).
-- [ ] T028 Run the `quickstart.md` validation (steps 1–4): codegen clean, gRPC build links, seam test green, smoke test against a gateway.
-- [ ] T029 Add `specs/022-cpp-sdk-grpc-transport/release-gate.md` — the Constitution V gates: RPi ≥7-day soak before flipping native default to gRPC (SC-004); the ESP32-S3 spike acceptance bar.
-- [ ] T030 [P] Verify SC-005: a `-DAIVG_SAT_ENABLE_GRPC=OFF` build is source-compatible with feature-020 integrations (no public-API break) — note the check in `docs/api.md`.
+- [X] T026 [P] Document the gRPC transport in `sdks/cpp/docs/api.md` — `AIVG_SAT_ENABLE_GRPC`, the new options, and `proto/aivg/satellite/v1/` as the consumed contract.
+- [X] T027 [P] Add a CHANGELOG / version note for the C++ SDK (gRPC transport; consumes the `0.3.0` contract envelope; RPi-tier-first).
+- [X] T028 Run the `quickstart.md` validation (steps 1–4): codegen clean, gRPC build links, seam test green, smoke test against a gateway.
+- [X] T029 Add `specs/022-cpp-sdk-grpc-transport/release-gate.md` — the Constitution V gates: RPi ≥7-day soak before flipping native default to gRPC (SC-004); the ESP32-S3 spike acceptance bar.
+- [X] T030 [P] Verify SC-005: a `-DAIVG_SAT_ENABLE_GRPC=OFF` build is source-compatible with feature-020 integrations (no public-API break) — note the check in `docs/api.md`.
 
 ---
 
