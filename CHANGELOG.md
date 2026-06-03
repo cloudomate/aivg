@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — Feature 021: gRPC satellite transport
+## [0.3.0] — 2026-06-03 — Feature 021: gRPC satellite transport
 
 Adds a **gRPC bidirectional-streaming transport** for native satellites as an
 additive sibling under `aivg_core.transports.grpc/` (mirrors the feature-017
