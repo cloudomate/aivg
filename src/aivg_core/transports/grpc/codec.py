@@ -24,11 +24,16 @@ _NAME_TO_CODEC = {
 
 
 def _opus_available() -> bool:
-    """Whether an Opus encoder is importable. Phase-1 MVP ships without
-    one, so this is False and selection falls back to PCM."""
-    import importlib.util
+    """Whether a 48 kHz Opus encoder is available. Uses PyAV's bundled libopus
+    (PyAV is already a hard dependency), so Opus downstream needs no extra
+    package — it is effectively always producible (feature 024)."""
+    try:
+        import av  # noqa: WPS433
 
-    return importlib.util.find_spec("opuslib") is not None
+        av.codec.Codec("libopus", "w")
+        return True
+    except Exception:  # noqa: BLE001 - any import/codec failure => not producible
+        return False
 
 
 def select_downstream_codec(
@@ -63,18 +68,54 @@ def select_downstream_codec(
     return CODEC_PCM_S16LE_16K
 
 
-def encode(codec: int, pcm_s16le_16k: bytes) -> bytes:
-    """Encode one 16 kHz s16le mono PCM chunk to the chosen codec's wire
-    payload. PCM is a passthrough; Opus encodes when available, else falls
-    back to returning PCM (the caller has already selected a producible
-    codec via :func:`select_downstream_codec`, so this fallback is only a
-    defensive belt)."""
-    if codec == CODEC_PCM_S16LE_16K:
-        return pcm_s16le_16k
-    if codec == CODEC_OPUS and _opus_available():  # pragma: no cover - no encoder in MVP env
-        import opuslib  # noqa: WPS433
+def encode(codec: int, pcm: bytes) -> bytes:
+    """Wire payload for a raw-PCM downstream codec — a passthrough. Opus
+    downstream is encoded by the stateful :class:`OpusEncoder48k` in the media
+    adapter (feature 024), not here, so this only handles PCM."""
+    return pcm
 
-        enc = opuslib.Encoder(16000, 1, opuslib.APPLICATION_VOIP)
-        # 20 ms @ 16 kHz = 320 samples/frame; caller frames upstream.
-        return enc.encode(pcm_s16le_16k, 320)
-    return pcm_s16le_16k
+
+class OpusEncoder48k:
+    """Stateful 48 kHz mono Opus encoder (libopus via PyAV — already a project
+    dependency, so no extra package is needed).
+
+    The gateway pipeline is native 48 kHz; encoding Opus directly at 48 kHz —
+    rather than downsampling to 16 kHz first — preserves the full audio band for
+    a device that decodes Opus at 48 kHz (feature 024). Opus is internally always
+    48 kHz, so this is wire-compatible: a 16 kHz-decoder device still decodes the
+    same packets (to 16 kHz); it simply now receives full-band audio.
+
+    Feed exactly one 20 ms / 960-sample s16 mono frame per :meth:`encode` call;
+    encoder priming may delay the first packet, so each call returns
+    zero-or-more Opus packets. :meth:`flush` drains the tail at session end.
+    """
+
+    SR = 48000
+
+    def __init__(self) -> None:
+        import av  # noqa: WPS433
+
+        self._av = av
+        ctx = av.codec.CodecContext.create("libopus", "w")
+        ctx.sample_rate = self.SR
+        ctx.format = "s16"
+        ctx.layout = "mono"
+        ctx.open()
+        self._ctx = ctx
+        self._pts = 0
+
+    def encode(self, pcm48: bytes) -> "list[bytes]":
+        import fractions  # noqa: WPS433
+
+        samples = len(pcm48) // 2
+        frame = self._av.AudioFrame(format="s16", layout="mono", samples=samples)
+        frame.planes[0].update(pcm48)
+        frame.sample_rate = self.SR
+        frame.pts = self._pts
+        frame.time_base = fractions.Fraction(1, self.SR)
+        self._pts += samples
+        return [bytes(p) for p in self._ctx.encode(frame)]
+
+    def flush(self) -> "list[bytes]":
+        """Drain any buffered packets (call once when the session closes)."""
+        return [bytes(p) for p in self._ctx.encode(None)]

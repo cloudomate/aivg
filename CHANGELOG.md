@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased] — Feature 024: full-band Opus downstream (gRPC)
+
+### Changed
+
+- **gRPC downstream Opus is now encoded at native 48 kHz** instead of 16 kHz,
+  removing the lossy 48 kHz→16 kHz→48 kHz double-resample for a device that
+  decodes Opus at 48 kHz (e.g. the C++ SDK / rpi-pipewire; the XVF3800's
+  I2S-48 kHz path). A client advertising `CODEC_OPUS` in
+  `SessionHeader.downstream_codec_pref` now gets full-band audio. **No wire,
+  proto, or contract change** — Opus is internally always 48 kHz, so the same
+  packets still decode on a 16 kHz-decoder device (to 16 kHz); only the encoder
+  rate (and thus the band delivered) changed.
+- **Opus downstream needs no extra dependency.** Encoding now uses PyAV's
+  bundled libopus (PyAV is already a hard dependency), via the new stateful
+  `aivg_core.transports.grpc.codec.OpusEncoder48k`, so Opus is always producible
+  without `opuslib`/system libopus. The raw-PCM downstream path is unchanged
+  (still 16 kHz); a client must advertise Opus to opt in.
+
 ## [0.3.1] — 2026-06-03 — Feature 023: gRPC downstream TTS decode fix
 
 ### Fixed

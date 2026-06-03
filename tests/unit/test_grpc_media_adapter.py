@@ -14,7 +14,10 @@ import pytest
 pytest.importorskip("grpc")
 
 from aivg_core.transports.grpc._generated import audio_pb2  # noqa: E402
-from aivg_core.transports.grpc.codec import CODEC_PCM_S16LE_16K  # noqa: E402
+from aivg_core.transports.grpc.codec import (  # noqa: E402
+    CODEC_OPUS,
+    CODEC_PCM_S16LE_16K,
+)
 from aivg_core.transports.grpc.media_adapter import GrpcMediaAdapter  # noqa: E402
 
 import _audio_fixtures as fx  # noqa: E402
@@ -165,3 +168,25 @@ async def test_inbound_queue_is_bounded_drops_not_grows():
     for _ in range(500):  # far more than the queue maxsize (100)
         a.push_inbound(_WIRE_FRAME)
     assert a._in.qsize() <= 100, "inbound queue exceeded its bound"
+
+
+# --- feature 024: Opus downstream encoded at native 48 kHz (full band) -----
+
+
+@pytest.mark.asyncio
+async def test_opus_downstream_is_48k_full_band():
+    """With Opus negotiated, downstream is Opus encoded at 48 kHz (NO 48->16
+    downsample), so a 12 kHz tone survives — the band the 16 kHz PCM path
+    (Nyquist 8 kHz) cannot carry — and the payload is compressed."""
+    a = GrpcMediaAdapter(downstream_codec=CODEC_OPUS)
+    pump = asyncio.create_task(a.run_outbound_pump())
+    await a.send_audio(fx.sine_wav(rate=48000, hz=12000.0, ms=300, amplitude=8000))
+    frames = await _drain_audio(a)
+    audio = [f.audio for f in frames if f.WhichOneof("body") == "audio"]
+    assert audio and all(ac.codec == CODEC_OPUS for ac in audio)
+    # Opus is compressed: each packet is far smaller than a raw 1920 B PCM frame.
+    assert all(0 < len(ac.payload) < 1920 for ac in audio)
+    pcm = fx.opus_decode_48k([ac.payload for ac in audio])
+    assert fx.peak(pcm) > 2000, "decoded Opus is silence/garbage"
+    assert 12000 * 0.9 <= fx.zero_crossing_hz(pcm, 48000) <= 12000 * 1.1, "full band not preserved"
+    await asyncio.wait_for(pump, timeout=2.0)

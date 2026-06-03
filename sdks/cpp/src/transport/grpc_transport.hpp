@@ -26,7 +26,11 @@ struct GrpcTransportOptions {
   std::string ca_pem;          // mTLS material (when use_tls)
   std::string cert_pem;
   std::string key_pem;
-  Codec downstream_pref = Codec::PcmS16le16k;
+  // Preferred downstream codec (feature 024). Opus is decoded at native 48 kHz
+  // by OpusBridge, so it gives full-band playback with no 48->16->48 resample;
+  // 16 kHz PCM is always advertised as a fallback. Defaults to Opus for the
+  // native tier (the rpi-pipewire reference rig plays at 48 kHz).
+  Codec downstream_pref = Codec::Opus;
 };
 
 // A client lifecycle signal pushed up the audio stream (FR maps to proto

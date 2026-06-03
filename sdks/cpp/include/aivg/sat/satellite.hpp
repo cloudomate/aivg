@@ -56,6 +56,11 @@ struct SatelliteOptions {
   TransportPref transport = TransportPref::Auto;
   std::uint16_t grpc_port = 8645;  // gRPC audio-plane port on the gateway host
   bool grpc_tls = false;           // insecure (trusted LAN) vs SSL/mTLS (fleet)
+  // Feature 024 — request full-band Opus downstream on the gRPC transport
+  // (decoded at native 48 kHz, no 48->16->48 resample). 16 kHz PCM is always
+  // advertised as a fallback. Set false to force the 16 kHz PCM downstream.
+  // No effect on WebRTC. Default true (the native tier plays at 48 kHz).
+  bool grpc_downstream_opus = true;
 };
 
 // Owns one always-on control-plane WS and at most one active WebRTC voice

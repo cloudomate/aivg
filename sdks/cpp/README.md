@@ -56,8 +56,10 @@ o.device_name      = "Kitchen satellite";
 o.device_type      = "linux";                   // informational only
 o.firmware_version = "1.0.0";
 
-// You own capture + playback. PCM16 mono at the transport's rate (WebRTC 48 kHz,
-// gRPC 16 kHz). Fill `frames` samples; return how many (0 = no audio / muted).
+// You own capture + playback. PCM16 mono. WebRTC: 48 kHz both ways. gRPC: mic
+// 16 kHz; playback 48 kHz with the default full-band Opus downstream (feature
+// 024) — set `grpc_downstream_opus=false` for a 16 kHz PCM downstream instead.
+// Fill `frames` samples; return how many (0 = no audio / muted).
 o.audio_input = [](std::int16_t* buf, std::size_t frames) -> std::size_t {
   return my_capture(buf, frames);          // your mic
 };
@@ -99,6 +101,8 @@ o.transport = TransportPref::Auto;     // default — negotiate
 // o.transport = TransportPref::Webrtc;
 o.grpc_port = 8645;                    // gateway gRPC audio port
 o.grpc_tls  = false;                   // insecure (trusted LAN) | true => SSL/mTLS
+o.grpc_downstream_opus = true;         // full-band 48 kHz Opus downstream (default)
+                                       //   | false => 16 kHz PCM downstream
 ```
 
 A WebRTC-only build advertises only `["webrtc"]`, so a gateway never steers it
