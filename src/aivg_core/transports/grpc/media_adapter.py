@@ -20,6 +20,8 @@ from typing import Optional
 
 from ._generated import audio_pb2
 from . import codec as _codec
+from ...audio.tts_decode import decode_tts_to_pcm48k
+from ...webrtc.media import PcmFramer
 
 # Wire / internal audio constants (identical to the esphome adapter).
 _WIRE_SR = 16000
@@ -37,7 +39,10 @@ class GrpcMediaAdapter:
     bound, FR-021):
 
     - ``_in``     inbound PCM frames, resampled 16 kHz→48 kHz / 20 ms.
-    - ``_out``    outbound PCM frames from ``Session.send_audio`` (48 kHz).
+    - ``_out``    outbound **48 kHz s16 mono PCM** frames (1920 B / 20 ms).
+                  ``send_audio`` decodes the provider-encoded TTS clip to this
+                  canonical format before queuing (feature 023), so the existing
+                  48→16 downsample in ``run_outbound_pump`` operates on real PCM.
     - ``_server`` merged outbound ``ServerFrame`` stream the servicer yields.
     """
 
@@ -45,6 +50,7 @@ class GrpcMediaAdapter:
         self._codec = downstream_codec
         self._in: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=100)
         self._out: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=100)
+        self._out_framer = PcmFramer(_INTERNAL_FRAME_BYTES)  # 48 kHz / 20 ms = 1920 B
         self._server: asyncio.Queue[Optional[audio_pb2.ServerFrame]] = asyncio.Queue(
             maxsize=200
         )
@@ -62,9 +68,23 @@ class GrpcMediaAdapter:
         return await self._in.get()
 
     async def send_audio(self, pcm: bytes) -> None:
+        """Decode a provider-encoded TTS clip to 48 kHz s16 mono PCM and enqueue
+        it as 20 ms frames (feature 023). Empty/sentinel/undecodable input emits
+        nothing and keeps the session alive (mirrors ``webrtc/signaling.py``).
+        Per-frame ``put`` on the bounded ``_out`` queue paces to real time and
+        keeps ``stop_playback`` (barge-in) frame-granular."""
         if self._closed:
             return
-        await self._out.put(pcm)
+        if not pcm or len(pcm) < 16:
+            return  # empty / sentinel (e.g. b"__PROVIDERS_UNAVAILABLE__") / tool-only
+        pcm48 = decode_tts_to_pcm48k(pcm)
+        if not pcm48:
+            return  # undecodable — drop, session stays alive
+        for frame in self._out_framer.push(pcm48):
+            await self._out.put(frame)
+        tail = self._out_framer.flush()
+        if tail:
+            await self._out.put(tail)
 
     async def stop_playback(self) -> None:
         # Drain queued outbound PCM AND any not-yet-yielded audio frames so

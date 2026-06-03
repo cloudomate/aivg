@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] — Feature 023: gRPC downstream TTS decode fix
+
+### Fixed
+
+- **gRPC voice plane played noise instead of speech.** `GrpcMediaAdapter.send_audio`
+  queued the **raw, provider-encoded** TTS clip straight into its 48 kHz PCM queue
+  and then ran the existing 48 kHz→16 kHz downsample over bytes that were never
+  48 kHz PCM, so gRPC satellites heard distortion/noise. `send_audio` now decodes
+  the clip to canonical **s16 mono 48 kHz** PCM (via PyAV / in-process ffmpeg —
+  `av.open` + `av.AudioResampler`) and frames it to 20 ms before queuing, mirroring
+  the WebRTC transport. The downstream 48→16 downsample (gateway) and 16→48 upsample
+  (client) are now correct end-to-end. Empty/sentinel/undecodable clips emit no
+  audio and keep the session alive (WebRTC parity). **Internal-only — no proto/wire
+  change, no client change.**
+
+### Added
+
+- `aivg_core.audio.tts_decode.decode_tts_to_pcm48k` — the single canonical
+  TTS-decode helper (s16 mono 48 kHz) the transports share so they cannot diverge
+  in codec/rate handling again.
+
 ## [0.3.0] — 2026-06-03 — Feature 021: gRPC satellite transport
 
 Adds a **gRPC bidirectional-streaming transport** for native satellites as an

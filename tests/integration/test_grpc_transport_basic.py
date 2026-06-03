@@ -68,10 +68,22 @@ async def _client_frames(session_id: str, n_pcm: int):
 
 @pytest.mark.asyncio
 async def test_one_turn_over_grpc(echo_platform):
+    import _audio_fixtures as fx
+
     plat, mod = echo_platform
     mod.PLATFORM.reply_deltas = ["echo says hi"]
     mod.PLATFORM.eou_after_frames = 5
     mod.PLATFORM._frame_count = 0
+    # Feature 023: a real provider returns an ENCODED container at its native
+    # rate (here a 24 kHz WAV); the transport decodes/resamples to 48 kHz before
+    # queuing. (The echo default returns a non-audio string the decoder correctly
+    # drops — that string encoded the pre-023 "treat bytes as PCM" bug.)
+    _tone = fx.sine_wav(rate=24000, hz=440.0, ms=200)
+
+    async def _synth(_text: str) -> bytes:
+        return _tone
+
+    mod.PLATFORM.synthesize = _synth
 
     registry = Registry()
     sink = LogSink()
@@ -102,6 +114,11 @@ async def test_one_turn_over_grpc(echo_platform):
         assert all(
             a.codec == audio_pb2.Codec.Value("CODEC_PCM_S16LE_16K") for a in audio_frames
         ), "downstream codec not the explicit PCM default"
+        # Feature 023: the ~200 ms decoded reply yields substantial 16 kHz PCM
+        # (≈ 0.2 s · 16 kHz · 2 B ≈ 6400 B) — proof the clip was decoded+resampled,
+        # not the handful of bytes the pre-023 raw-passthrough produced.
+        total = sum(len(a.payload) for a in audio_frames)
+        assert total > 2000, f"downstream audio implausibly small ({total} B) — not decoded"
         # Turn-timing events ride the same stream (FR-010).
         assert audio_pb2.ServerEvent.SPEAKING_STARTED in events
     finally:
