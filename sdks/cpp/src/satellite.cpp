@@ -119,6 +119,10 @@ std::unique_ptr<detail::Transport> make_voice_transport(const SatelliteOptions& 
     g.target = grpc_target(o);
     g.session_id = mint_session_id(o.device_id);
     g.use_tls = o.grpc_tls;
+    // Feature 024 — full-band Opus downstream (decoded at 48 kHz) unless the
+    // caller opts out; 16 kHz PCM is advertised as a fallback either way.
+    g.downstream_pref =
+        o.grpc_downstream_opus ? detail::Codec::Opus : detail::Codec::PcmS16le16k;
     return std::make_unique<detail::GrpcTransport>(std::move(g));
   }
 #endif

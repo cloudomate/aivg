@@ -59,3 +59,22 @@ def peak(pcm_s16le: bytes) -> int:
     """Max |sample| of s16 mono PCM (0 ⇒ silence)."""
     a = struct.unpack("<%dh" % (len(pcm_s16le) // 2), pcm_s16le[: len(pcm_s16le) // 2 * 2])
     return max((abs(s) for s in a), default=0)
+
+
+def opus_decode_48k(payloads) -> bytes:
+    """Decode a sequence of Opus packet payloads to s16 mono 48 kHz PCM (the rate
+    a 48 kHz-native device would use). Feature 024 downstream proof."""
+    import av  # noqa: WPS433
+
+    dec = av.codec.CodecContext.create("libopus", "r")
+    dec.sample_rate = 48000
+    dec.format = "s16"
+    dec.layout = "mono"
+    dec.open()
+    out = bytearray()
+    for p in payloads:
+        for fr in dec.decode(av.Packet(p)):
+            out += bytes(fr.planes[0])[: fr.samples * 2]
+    for fr in dec.decode(None):  # flush
+        out += bytes(fr.planes[0])[: fr.samples * 2]
+    return bytes(out)

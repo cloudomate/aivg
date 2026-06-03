@@ -77,7 +77,13 @@ bool GrpcTransport::begin() {
   pb::ClientFrame hdr;
   auto* sh = hdr.mutable_session();
   sh->set_session_id(opts_.session_id);
+  // Advertise the preferred downstream codec best-first, then 16 kHz PCM as a
+  // guaranteed fallback so an older gateway that can't produce the preferred
+  // codec (e.g. Opus) still serves working audio (feature 024).
   sh->add_downstream_codec_pref(to_proto_codec(opts_.downstream_pref));
+  if (opts_.downstream_pref != Codec::PcmS16le16k) {
+    sh->add_downstream_codec_pref(pb::CODEC_PCM_S16LE_16K);
+  }
   {
     std::lock_guard<std::mutex> lk(impl_->write_mu);
     if (!impl_->stream->Write(hdr)) return false;

@@ -31,6 +31,7 @@ class FakeAudio final : public pb::Audio::Service {
     while (stream->Read(&cf)) {
       if (cf.has_session()) {
         session_id = cf.session().session_id();
+        for (int c : cf.session().downstream_codec_pref()) codec_prefs.push_back(c);
         pb::ServerFrame s;
         s.mutable_event()->set_kind(pb::ServerEvent::SPEAKING_STARTED);
         stream->Write(s);
@@ -60,6 +61,7 @@ class FakeAudio final : public pb::Audio::Service {
 
   std::string session_id;
   std::atomic<int> pcm_frames{0};
+  std::vector<int> codec_prefs;  // advertised downstream_codec_pref (feature 024)
 };
 
 int main() {
@@ -113,6 +115,11 @@ int main() {
 
   // Assertions.
   assert(svc.session_id == "sess-1" && "server must receive the SessionHeader id");
+  // Feature 024: the default gRPC client advertises Opus best-first, with
+  // 16 kHz PCM as the guaranteed fallback.
+  assert(svc.codec_prefs.size() == 2 && svc.codec_prefs[0] == pb::CODEC_OPUS &&
+         svc.codec_prefs[1] == pb::CODEC_PCM_S16LE_16K &&
+         "client must advertise [Opus, PCM_16K] downstream prefs");
   assert(svc.pcm_frames.load() >= 1 && "server must receive raw PCM frames");
   assert(audio_frames.load() >= 1 && "transport must surface reply audio");
   assert(last_codec.load() == Codec::PcmS16le16k && "codec must be surfaced (PCM)");

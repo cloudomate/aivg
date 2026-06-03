@@ -49,12 +49,17 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-async def _client_frames(session_id: str, n_pcm: int):
-    """Async generator of ClientFrames: header, PCM frames, end-of-utterance."""
+async def _client_frames(session_id: str, n_pcm: int, downstream_pref=None):
+    """Async generator of ClientFrames: header, PCM frames, end-of-utterance.
+
+    ``downstream_pref`` is the best-first codec list the client advertises;
+    defaults to the explicit 16 kHz PCM default."""
+    if downstream_pref is None:
+        downstream_pref = [audio_pb2.Codec.Value("CODEC_PCM_S16LE_16K")]
     yield audio_pb2.ClientFrame(
         session=audio_pb2.SessionHeader(
             session_id=session_id,
-            downstream_codec_pref=[audio_pb2.Codec.Value("CODEC_PCM_S16LE_16K")],
+            downstream_codec_pref=downstream_pref,
         )
     )
     pcm = b"\x12\x34" * 320  # 320 samples = 640 bytes @ 16 kHz (20 ms)
@@ -121,6 +126,51 @@ async def test_one_turn_over_grpc(echo_platform):
         assert total > 2000, f"downstream audio implausibly small ({total} B) — not decoded"
         # Turn-timing events ride the same stream (FR-010).
         assert audio_pb2.ServerEvent.SPEAKING_STARTED in events
+    finally:
+        await transport.stop()
+
+
+@pytest.mark.asyncio
+async def test_turn_negotiates_opus_48k_downstream(echo_platform):
+    """Feature 024: a client advertising CODEC_OPUS gets Opus encoded at native
+    48 kHz (no 48->16 downsample) — chunks stamped OPUS, compressed, and the
+    decoded audio preserves a 12 kHz tone (full band)."""
+    import _audio_fixtures as fx
+
+    plat, mod = echo_platform
+    mod.PLATFORM.reply_deltas = ["full band hello"]
+    mod.PLATFORM.eou_after_frames = 5
+    mod.PLATFORM._frame_count = 0
+    _tone = fx.sine_wav(rate=48000, hz=12000.0, ms=300, amplitude=8000)
+
+    async def _synth(_text: str) -> bytes:
+        return _tone
+
+    mod.PLATFORM.synthesize = _synth
+
+    registry = Registry()
+    sink = LogSink()
+    port = _free_port()
+    transport = GrpcAudioTransport(
+        registry=registry, platform=plat, sink=sink, host="127.0.0.1", port=port
+    )
+    await transport.start()
+    pref_opus = [audio_pb2.Codec.Value("CODEC_OPUS")]
+    try:
+        async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            stub = audio_pb2_grpc.AudioStub(channel)
+            payloads = []
+            async for sf in stub.Stream(
+                _client_frames("sess-opus", n_pcm=10, downstream_pref=pref_opus)
+            ):
+                if sf.WhichOneof("body") == "audio":
+                    assert sf.audio.codec == audio_pb2.Codec.Value("CODEC_OPUS")
+                    payloads.append(sf.audio.payload)
+
+        assert payloads, "no Opus AudioChunk received"
+        pcm = fx.opus_decode_48k(payloads)
+        assert fx.peak(pcm) > 2000, "decoded Opus is silence/garbage"
+        assert 12000 * 0.9 <= fx.zero_crossing_hz(pcm, 48000) <= 12000 * 1.1, "full band lost"
     finally:
         await transport.stop()
 

@@ -48,6 +48,12 @@ class GrpcMediaAdapter:
 
     def __init__(self, *, downstream_codec: int) -> None:
         self._codec = downstream_codec
+        # Feature 024: when Opus is negotiated, encode the gateway's native
+        # 48 kHz audio directly (no 48->16 downsample) so a device decoding Opus
+        # at 48 kHz gets the full audio band. Stateful encoder, one per session.
+        self._opus_enc = (
+            _codec.OpusEncoder48k() if downstream_codec == _codec.CODEC_OPUS else None
+        )
         self._in: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=100)
         self._out: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=100)
         self._out_framer = PcmFramer(_INTERNAL_FRAME_BYTES)  # 48 kHz / 20 ms = 1920 B
@@ -149,9 +155,24 @@ class GrpcMediaAdapter:
 
     # --- outbound: PCM pump + UI events -> merged ServerFrame stream -----
 
+    async def _emit_audio(self, payload: bytes) -> None:
+        """Wrap a wire payload in an ``AudioChunk`` ServerFrame (monotonic seq)
+        and enqueue it (bounded → backpressure)."""
+        if not payload:
+            return
+        self._seq += 1
+        await self._server.put(
+            audio_pb2.ServerFrame(
+                audio=audio_pb2.AudioChunk(
+                    codec=self._codec, payload=payload, seq=self._seq
+                )
+            )
+        )
+
     async def run_outbound_pump(self) -> None:
-        """Drain outbound PCM, downsample 48 kHz→16 kHz, encode to the chosen
-        codec, and enqueue an ``AudioChunk`` ServerFrame. Terminates the
+        """Drain outbound native 48 kHz PCM and emit ``AudioChunk`` ServerFrames.
+        Opus is encoded directly at 48 kHz — full band, NO downsample (feature
+        024); raw PCM is downsampled 48 kHz→16 kHz (the default). Terminates the
         ServerFrame stream with a ``None`` sentinel when the session closes."""
         try:
             while True:
@@ -160,17 +181,18 @@ class GrpcMediaAdapter:
                     break
                 if not chunk:
                     continue
-                downsampled, self._downsample_state = audioop.ratecv(
-                    chunk, 2, 1, _INTERNAL_SR, _WIRE_SR, self._downsample_state
-                )
-                payload = _codec.encode(self._codec, downsampled)
-                self._seq += 1
-                frame = audio_pb2.ServerFrame(
-                    audio=audio_pb2.AudioChunk(
-                        codec=self._codec, payload=payload, seq=self._seq
+                if self._opus_enc is not None:
+                    for packet in self._opus_enc.encode(chunk):  # native 48 kHz Opus
+                        await self._emit_audio(packet)
+                else:
+                    downsampled, self._downsample_state = audioop.ratecv(
+                        chunk, 2, 1, _INTERNAL_SR, _WIRE_SR, self._downsample_state
                     )
-                )
-                await self._server.put(frame)
+                    await self._emit_audio(_codec.encode(self._codec, downsampled))
+            # End of stream: flush the Opus encoder's buffered tail.
+            if self._opus_enc is not None:
+                for packet in self._opus_enc.flush():
+                    await self._emit_audio(packet)
         finally:
             try:
                 self._server.put_nowait(None)
