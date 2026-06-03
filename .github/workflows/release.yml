@@ -88,11 +88,13 @@ jobs:
   publish-testpypi:
     name: Publish to TestPyPI (staging)
     needs: build
-    # v0.2.1 was already published to TestPyPI from an earlier run; TestPyPI
-    # versions are immutable and sdists aren't byte-reproducible, so the
-    # staging gate can never re-accept this version. Skip it for v0.2.1 only;
-    # every other tag still goes through the TestPyPI gate.
-    if: ${{ github.ref_name != 'v0.2.1' }}
+    # Some versions already published to TestPyPI from an earlier/failed run
+    # (the publish step succeeded but a later step failed). TestPyPI versions
+    # are immutable and sdists aren't byte-reproducible, so the staging gate can
+    # never re-accept those versions — skip them. Every other tag still goes
+    # through the gate (now with a version-agnostic smoke check, so a wire bump
+    # no longer burns the slot). Burned: v0.2.1, v0.3.0.
+    if: ${{ github.ref_name != 'v0.2.1' && github.ref_name != 'v0.3.0' }}
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -127,9 +129,13 @@ jobs:
             --index-strategy unsafe-best-match \
             "aivg==${GITHUB_REF_NAME#v}"
           /tmp/smoke/bin/aivg --version
+          # The smoke proves the package installs + the CLI runs; it must NOT
+          # hardcode the contract value (that drifts every wire bump and is
+          # already covered by the unit tests). Just require a non-empty
+          # contract_version in the envelope.
           CONTRACT=$(/tmp/smoke/bin/aivg --contract-version | python -c "import sys,json; print(json.load(sys.stdin)['data']['contract_version'])")
-          if [ "$CONTRACT" != "0.2.0" ]; then
-            echo "::error::Post-install contract_version is $CONTRACT, expected 0.2.0"
+          if [ -z "$CONTRACT" ]; then
+            echo "::error::Post-install contract_version is empty"
             exit 1
           fi
           echo "Smoke OK: aivg installed from TestPyPI, contract_version=$CONTRACT"
