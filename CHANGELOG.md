@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — Feature 023: gRPC downstream TTS decode fix
+## [0.3.1] — 2026-06-03 — Feature 023: gRPC downstream TTS decode fix
 
 ### Fixed
 
