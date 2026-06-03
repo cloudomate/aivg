@@ -68,10 +68,20 @@ async def _complete_turn(port: int) -> int:
 
 @pytest.mark.asyncio
 async def test_gateway_restart_recovers_on_next_turn(echo_platform):
+    import _audio_fixtures as fx
+
     plat, mod = echo_platform
     mod.PLATFORM.reply_deltas = ["hi"]
     mod.PLATFORM.eou_after_frames = 5
     mod.PLATFORM._frame_count = 0
+    # Feature 023: provider TTS is a decodable container (a 24 kHz WAV), so the
+    # post-restart turn produces real decoded downstream audio.
+    _tone = fx.sine_wav(rate=24000, hz=440.0, ms=120)
+
+    async def _synth(_text: str) -> bytes:
+        return _tone
+
+    mod.PLATFORM.synthesize = _synth
 
     registry = Registry()
     sink = LogSink()

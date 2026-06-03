@@ -17,7 +17,23 @@ from aivg_core.transports.grpc._generated import audio_pb2  # noqa: E402
 from aivg_core.transports.grpc.codec import CODEC_PCM_S16LE_16K  # noqa: E402
 from aivg_core.transports.grpc.media_adapter import GrpcMediaAdapter  # noqa: E402
 
+import _audio_fixtures as fx  # noqa: E402
+
 _WIRE_FRAME = b"\x10\x20" * 320  # 640 bytes = 20 ms @ 16 kHz
+_WIRE_SR = 16000  # downstream AudioChunk PCM rate
+
+
+async def _drain_audio(a: GrpcMediaAdapter) -> "list[audio_pb2.ServerFrame]":
+    """Close the adapter and collect every queued ServerFrame up to the None
+    sentinel."""
+    await a.close()
+    frames = []
+    while True:
+        f = await asyncio.wait_for(a.next_server_frame(), timeout=1.0)
+        if f is None:
+            break
+        frames.append(f)
+    return frames
 
 
 @pytest.mark.asyncio
@@ -42,19 +58,88 @@ async def test_push_eof_yields_none():
 
 @pytest.mark.asyncio
 async def test_outbound_pump_emits_audio_serverframe():
+    # Session hands send_audio a provider-encoded *container* (here a 24 kHz WAV),
+    # NOT raw PCM — send_audio decodes + resamples to 48 kHz before queuing (023).
     a = GrpcMediaAdapter(downstream_codec=CODEC_PCM_S16LE_16K)
     pump = asyncio.create_task(a.run_outbound_pump())
-    # Session pushes a 48 kHz/20 ms PCM chunk (1920 bytes).
-    await a.send_audio(b"\x00\x01" * 960)
-    frame = await asyncio.wait_for(a.next_server_frame(), timeout=1.0)
-    assert frame.WhichOneof("body") == "audio"
-    assert frame.audio.codec == CODEC_PCM_S16LE_16K
-    assert frame.audio.payload, "downsampled payload must be non-empty"
-    assert frame.audio.seq == 1
-    await a.close()
-    # After close, the pump terminates the stream with a None sentinel.
-    tail = await asyncio.wait_for(a.next_server_frame(), timeout=1.0)
-    assert tail is None
+    await a.send_audio(fx.sine_wav(rate=24000, hz=440.0, ms=200))
+    frames = await _drain_audio(a)
+    audio = [f for f in frames if f.WhichOneof("body") == "audio"]
+    assert audio, "at least one AudioChunk ServerFrame must be emitted"
+    assert all(f.audio.codec == CODEC_PCM_S16LE_16K for f in audio)
+    assert all(f.audio.payload for f in audio), "every downsampled payload non-empty"
+    assert [f.audio.seq for f in audio] == list(range(1, len(audio) + 1)), "monotonic seq"
+    await asyncio.wait_for(pump, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_outbound_audio_reconstructs_the_tone_not_noise():
+    """Regression guard for the feature-023 bug: a non-48 kHz tone container must
+    come out as the SAME tone on the 16 kHz downstream wire — not noise."""
+    a = GrpcMediaAdapter(downstream_codec=CODEC_PCM_S16LE_16K)
+    pump = asyncio.create_task(a.run_outbound_pump())
+    await a.send_audio(fx.sine_wav(rate=24000, hz=440.0, ms=400, amplitude=8000))
+    frames = await _drain_audio(a)
+    payload = b"".join(f.audio.payload for f in frames if f.WhichOneof("body") == "audio")
+    assert fx.peak(payload) > 2000, "downstream audio is silence/garbage, not the tone"
+    est = fx.zero_crossing_hz(payload, _WIRE_SR)
+    assert 440.0 * 0.85 <= est <= 440.0 * 1.15, f"pitch not preserved (~{est:.0f} Hz)"
+    await asyncio.wait_for(pump, timeout=1.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", [b"", b"short", b"__PROVIDERS_UNAVAILABLE__"])
+async def test_empty_sentinel_emits_no_audio_and_stays_usable(bad):
+    """US2: empty / sub-minimal / sentinel input emits no AudioChunk, and the
+    adapter still works for a subsequent valid clip."""
+    a = GrpcMediaAdapter(downstream_codec=CODEC_PCM_S16LE_16K)
+    pump = asyncio.create_task(a.run_outbound_pump())
+    await a.send_audio(bad)
+    assert a._out.qsize() == 0, "no frames should be queued for empty/sentinel input"
+    # Still usable: a real clip afterwards produces audio.
+    await a.send_audio(fx.sine_wav(rate=24000, hz=440.0, ms=60))
+    frames = await _drain_audio(a)
+    assert any(f.WhichOneof("body") == "audio" for f in frames)
+    await asyncio.wait_for(pump, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_undecodable_clip_dropped_without_raising():
+    """US2: undecodable bytes emit no audio and never raise."""
+    a = GrpcMediaAdapter(downstream_codec=CODEC_PCM_S16LE_16K)
+    pump = asyncio.create_task(a.run_outbound_pump())
+    await a.send_audio(fx.corrupt_blob())  # must not raise
+    assert a._out.qsize() == 0
+    frames = await _drain_audio(a)
+    assert not any(f.WhichOneof("body") == "audio" for f in frames)
+    await asyncio.wait_for(pump, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_stop_playback_drains_queued_frames_for_bargein():
+    """US3: barge-in drops queued/unplayed audio frames promptly."""
+    a = GrpcMediaAdapter(downstream_codec=CODEC_PCM_S16LE_16K)
+    # No pump running: frames accumulate in _out, then barge-in drains them.
+    await a.send_audio(fx.sine_wav(rate=24000, hz=440.0, ms=500))
+    assert a._out.qsize() > 0, "clip should have queued multiple 20 ms frames"
+    await a.stop_playback()
+    assert a._out.qsize() == 0, "stop_playback must drain queued audio"
+
+
+@pytest.mark.asyncio
+async def test_streaming_two_clips_no_seam_discontinuity():
+    """US3: two consecutive clips in one turn stream cleanly (carried downsample
+    state keeps the seam seamless — no click)."""
+    a = GrpcMediaAdapter(downstream_codec=CODEC_PCM_S16LE_16K)
+    pump = asyncio.create_task(a.run_outbound_pump())
+    await a.send_audio(fx.sine_wav(rate=24000, hz=440.0, ms=200))
+    await a.send_audio(fx.sine_wav(rate=24000, hz=440.0, ms=200))
+    frames = await _drain_audio(a)
+    payload = b"".join(f.audio.payload for f in frames if f.WhichOneof("body") == "audio")
+    # Both clips present (≈ 400 ms @ 16 kHz s16 ≈ 12800 B) and still the same tone.
+    assert len(payload) > int(0.30 * _WIRE_SR) * 2
+    est = fx.zero_crossing_hz(payload, _WIRE_SR)
+    assert 440.0 * 0.85 <= est <= 440.0 * 1.15
     await asyncio.wait_for(pump, timeout=1.0)
 
 
