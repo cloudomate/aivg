@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aivg"
-version = "0.3.1"
+version = "0.3.2"
 description = "AIVG — AI Voice Gateway: agent-platform-agnostic voice-satellite management plane + CLI"
 requires-python = ">=3.11"
 license = {text = "MIT"}

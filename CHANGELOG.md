@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — Feature 024: full-band Opus downstream (gRPC)
+## [0.3.2] — 2026-06-03 — Feature 024: full-band Opus downstream (gRPC)
 
 ### Changed
 
