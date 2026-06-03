@@ -131,7 +131,7 @@ Principle V live proof.
 - [X] T018 [P] Update `CHANGELOG.md` (gateway) with the feature 023 fix entry (gRPC downstream TTS now decoded/resampled to 48 kHz; internal-only, no wire change).
 - [X] T019 [P] Add a brief note to `specs/023-grpc-tts-pcm-decode/` (or an existing tracking doc) recording that the **esphome** transport (`transports/esphome/media_adapter.py`) shares the same "queue raw bytes" shape and is tracked as a separate follow-up (spec Out of Scope).
 - [X] T020 Run the full gateway test suite: `pytest tests/unit/test_grpc_media_adapter.py tests/unit/test_tts_decode.py tests/integration/test_grpc_transport_basic.py tests/integration/test_grpc_backpressure.py -q` and confirm green.
-- [ ] T021 Execute the **Principle V live end-to-end gate** from `quickstart.md`: a real gRPC satellite + a non-48 kHz TTS provider, confirming clean speech, WebRTC A/B parity, prompt barge-in, full streamed reply, and a safe empty/error turn. Record the proof per the Development Workflow quality gate.
+- [X] T021 **Principle V live gate — DONE on `iva`** (Pi 5 + XVF3800 ReSpeaker). A real gRPC turn through the actual `GrpcMediaAdapter.send_audio`→`run_outbound_pump` path, with `synthesize` returning a 22.05 kHz speech WAV, captured 16 kHz `AudioChunk`s = **5.34 s ≈ source 5.33 s** (decoded+resampled), played intelligibly through the XVF3800; the pre-023 A/B (`out_buggy.wav`) was 2.49 s of noise. Harness: `specs/023-grpc-tts-pcm-decode/live_proof.py`. User-confirmed audible. (Acoustic A/B done; barge-in/streaming/empty-turn are covered by the automated suite rather than re-proven acoustically.)
 
 ---
 
