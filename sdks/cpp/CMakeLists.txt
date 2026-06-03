@@ -177,6 +177,11 @@ if(AIVG_SAT_BUILD_TESTS)
   target_include_directories(aivg_sat_test_negotiation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   add_test(NAME test_negotiation COMMAND aivg_sat_test_negotiation)
 
+  # Feature 022 — gRPC 48<->16 kHz resampler (pure header; no backend deps).
+  add_executable(aivg_sat_test_pcm_resampler tests/test_pcm_resampler.cpp)
+  target_include_directories(aivg_sat_test_pcm_resampler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME test_pcm_resampler COMMAND aivg_sat_test_pcm_resampler)
+
   if(nlohmann_json_FOUND)
     add_executable(aivg_sat_test_proto tests/test_proto.cpp)
     target_link_libraries(aivg_sat_test_proto PRIVATE aivg_sat nlohmann_json::nlohmann_json)

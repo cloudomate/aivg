@@ -44,8 +44,10 @@ class GrpcTransport : public Transport {
 
   bool begin() override;
   const std::string& session_id() const noexcept override { return opts_.session_id; }
-  // 16 kHz * 20 ms = 320 samples per upstream PcmChunk.
-  std::size_t mic_frame_samples() const noexcept override { return 320; }
+  // The callback boundary is 48 kHz (the WebRTC/Opus plane rate), so the
+  // consumer wires one capture rate across transports. send_mic downsamples
+  // 48->16 kHz internally before the 16 kHz PcmChunk goes on the wire.
+  std::size_t mic_frame_samples() const noexcept override { return 960; }
   void send_mic(const std::int16_t* pcm16, std::size_t samples) override;
   bool ready() const noexcept override { return ready_.load(); }
   void stop() override;

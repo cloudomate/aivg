@@ -41,7 +41,9 @@ struct TransportEvent {
 class Transport {
  public:
   // Downstream audio: (payload, size, codec). WebRTC always delivers Opus;
-  // gRPC delivers whatever codec the gateway stamped on the AudioChunk.
+  // gRPC delivers the codec the gateway stamped on the AudioChunk, but raw
+  // PCM is resampled up to the 48 kHz callback boundary first (the codec tag
+  // is preserved — it only tells VoiceSession whether a decode is needed).
   using OnRemoteAudio =
       std::function<void(const std::uint8_t* payload, std::size_t size, Codec codec)>;
   using OnEvent = std::function<void(const TransportEvent& ev)>;
@@ -57,9 +59,11 @@ class Transport {
   // begin(). WebRTC mints it from signaling; gRPC carries the adoption id.
   virtual const std::string& session_id() const noexcept = 0;
 
-  // Samples per 20 ms mic frame this transport expects (= rate * 0.02). The
-  // capture rate is transport-dependent: WebRTC/Opus is 48 kHz (960), the gRPC
-  // PCM plane is 16 kHz (320). VoiceSession pulls this many per pump tick.
+  // Samples per 20 ms mic frame this transport expects (= rate * 0.02).
+  // Uniformly 48 kHz (960) across transports — the consumer wires ONE capture
+  // rate. WebRTC/Opus is natively 48 kHz; the gRPC transport accepts 48 kHz
+  // here and downsamples to its 16 kHz wire internally (send_mic).
+  // VoiceSession pulls this many per pump tick.
   virtual std::size_t mic_frame_samples() const noexcept = 0;
 
   // Push one frame of captured mic audio (PCM16 mono @ mic_frame_samples()).

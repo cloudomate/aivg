@@ -2,9 +2,11 @@
 //
 // The SDK links NO system audio backend (spec FR-005/006). The consumer
 // owns the microphone and speaker drivers and supplies these callbacks.
-// The callback boundary is always raw PCM16 mono at the negotiated rate;
-// the SDK performs Opus encode/decode internally (transport codec, not
-// STT/TTS — Constitution Principle I).
+// The callback boundary is always raw PCM16 mono at 48 kHz, regardless of
+// the negotiated transport; the SDK performs any codec encode/decode and
+// rate conversion internally (transport codec, not STT/TTS — Constitution
+// Principle I). WebRTC/Opus is natively 48 kHz; the gRPC transport resamples
+// to/from its 16 kHz wire so consumers wire one capture/playback rate.
 #ifndef AIVG_SAT_AUDIO_HPP
 #define AIVG_SAT_AUDIO_HPP
 

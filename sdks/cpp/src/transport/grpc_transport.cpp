@@ -2,13 +2,17 @@
 #include "transport/grpc_transport.hpp"
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 #include <grpcpp/grpcpp.h>
 
 #include "aivg/satellite/v1/audio.grpc.pb.h"
 #include "aivg/satellite/v1/audio.pb.h"
+#include "transport/pcm_resampler.hpp"
 
 namespace aivg::sat::detail {
 
@@ -47,6 +51,14 @@ struct GrpcTransport::Impl {
   grpc::ClientContext ctx;
   std::unique_ptr<grpc::ClientReaderWriter<pb::ClientFrame, pb::ServerFrame>> stream;
   std::mutex write_mu;  // serializes writes (mic pump + client signals + header)
+
+  // 48 kHz callback boundary <-> 16 kHz wire. Each resampler is touched by a
+  // single thread (mic_down by the mic pump, spk_up by the reader loop), so no
+  // locking is needed. Scratch buffers avoid a per-frame allocation.
+  LinearResampler mic_down{48000, 16000};
+  LinearResampler spk_up{16000, 48000};
+  std::vector<std::int16_t> mic_scratch;  // mic-pump thread only
+  std::vector<std::int16_t> spk_scratch;  // reader thread only
 };
 
 GrpcTransport::GrpcTransport(GrpcTransportOptions opts)
@@ -89,10 +101,16 @@ bool GrpcTransport::begin() {
 
 void GrpcTransport::send_mic(const std::int16_t* pcm16, std::size_t samples) {
   if (!ready_.load() || stopping_.load() || pcm16 == nullptr || samples == 0) return;
+  // The callback boundary is 48 kHz (the WebRTC/Opus plane rate); the gRPC
+  // wire is raw 16 kHz s16le PCM. Downsample 48->16 before framing — NO
+  // on-device Opus encode on the gRPC path (R-3).
+  impl_->mic_scratch.clear();
+  impl_->mic_down.process(pcm16, samples, impl_->mic_scratch);
+  if (impl_->mic_scratch.empty()) return;
   pb::ClientFrame f;
   auto* pcm = f.mutable_pcm();
-  // Raw 16 kHz s16le PCM — NO on-device Opus encode on the gRPC path (R-3).
-  pcm->set_samples(reinterpret_cast<const char*>(pcm16), samples * sizeof(std::int16_t));
+  pcm->set_samples(reinterpret_cast<const char*>(impl_->mic_scratch.data()),
+                   impl_->mic_scratch.size() * sizeof(std::int16_t));
   pcm->set_ts_ns(now_ns());
   std::lock_guard<std::mutex> lk(impl_->write_mu);
   if (impl_->stream) impl_->stream->Write(f);
@@ -118,8 +136,24 @@ void GrpcTransport::reader_loop() {
       case pb::ServerFrame::kAudio: {
         const auto& a = sf.audio();
         if (on_audio_ && !a.payload().empty()) {
-          on_audio_(reinterpret_cast<const std::uint8_t*>(a.payload().data()),
-                    a.payload().size(), from_proto_codec(a.codec()));
+          const Codec codec = from_proto_codec(a.codec());
+          if (codec == Codec::PcmS16le16k) {
+            // Raw PCM rides the wire at 16 kHz; upsample to the 48 kHz callback
+            // boundary so the consumer plays one rate across transports (Opus
+            // already decodes to 48 kHz in VoiceSession, so this aligns them).
+            const auto* s = reinterpret_cast<const std::int16_t*>(a.payload().data());
+            const std::size_t n = a.payload().size() / sizeof(std::int16_t);
+            impl_->spk_scratch.clear();
+            impl_->spk_up.process(s, n, impl_->spk_scratch);
+            if (!impl_->spk_scratch.empty()) {
+              on_audio_(reinterpret_cast<const std::uint8_t*>(impl_->spk_scratch.data()),
+                        impl_->spk_scratch.size() * sizeof(std::int16_t), codec);
+            }
+          } else {
+            // Opus (or other) — pass through untouched; VoiceSession decodes.
+            on_audio_(reinterpret_cast<const std::uint8_t*>(a.payload().data()),
+                      a.payload().size(), codec);
+          }
         }
         break;
       }

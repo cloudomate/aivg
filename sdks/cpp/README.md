@@ -56,8 +56,9 @@ o.device_name      = "Kitchen satellite";
 o.device_type      = "linux";                   // informational only
 o.firmware_version = "1.0.0";
 
-// You own capture + playback. PCM16 mono at the transport's rate (WebRTC 48 kHz,
-// gRPC 16 kHz). Fill `frames` samples; return how many (0 = no audio / muted).
+// You own capture + playback. PCM16 mono at 48 kHz for every transport — the
+// SDK resamples to/from the gRPC 16 kHz wire internally. Fill `frames`
+// samples; return how many (0 = no audio / muted).
 o.audio_input = [](std::int16_t* buf, std::size_t frames) -> std::size_t {
   return my_capture(buf, frames);          // your mic
 };
