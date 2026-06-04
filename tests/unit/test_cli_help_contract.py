@@ -93,14 +93,14 @@ def test_global_flags_present():
 
 
 def test_contract_version_at_post_021_baseline():
-    """Feature 021 bumps the wire-contract version to 0.3.0 — an ADDITIVE
+    """Feature 025 bumps the wire-contract version to 0.4.0 — an ADDITIVE
     minor over the 018 public baseline (0.2.0) that adds the gRPC transport.
-    History: 1.0.0 → (017) 1.1.0 → (018) 0.2.0 → (021) 0.3.0."""
+    History: 1.0.0 → (017) 1.1.0 → (018) 0.2.0 → (021) 0.3.0 → (025) 0.4.0."""
     out = _aivg("--json", "--contract-version")
     import json as _json
     env = _json.loads(out.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "0.3.0", (
-        "Feature 021 bumps the contract envelope to 0.3.0 (additive: adds "
+    assert env["data"]["contract_version"] == "0.4.0", (
+        "Feature 025 bumps the contract envelope to 0.4.0 (additive: adds "
         "the grpc transport alongside webrtc + esphome_api)."
     )
     assert "grpc" in env["data"].get("transports", [])

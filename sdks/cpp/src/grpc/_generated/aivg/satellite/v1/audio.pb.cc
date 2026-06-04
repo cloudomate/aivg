@@ -55,6 +55,8 @@ PROTOBUF_CONSTEXPR SessionHeader::SessionHeader(
     ::_pbi::ConstantInitialized): _impl_{
     /*decltype(_impl_.downstream_codec_pref_)*/{}
   , /*decltype(_impl_._downstream_codec_pref_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.upstream_codec_pref_)*/{}
+  , /*decltype(_impl_._upstream_codec_pref_cached_byte_size_)*/{0}
   , /*decltype(_impl_.session_id_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct SessionHeaderDefaultTypeInternal {
@@ -80,6 +82,20 @@ struct PcmChunkDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PcmChunkDefaultTypeInternal _PcmChunk_default_instance_;
+PROTOBUF_CONSTEXPR OpusChunk::OpusChunk(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.payload_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.ts_ns_)*/uint64_t{0u}
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct OpusChunkDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR OpusChunkDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~OpusChunkDefaultTypeInternal() {}
+  union {
+    OpusChunk _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 OpusChunkDefaultTypeInternal _OpusChunk_default_instance_;
 PROTOBUF_CONSTEXPR AudioChunk::AudioChunk(
     ::_pbi::ConstantInitialized): _impl_{
     /*decltype(_impl_.payload_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
@@ -162,7 +178,7 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORIT
 }  // namespace v1
 }  // namespace satellite
 }  // namespace aivg
-static ::_pb::Metadata file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[10];
+static ::_pb::Metadata file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[11];
 static const ::_pb::EnumDescriptor* file_level_enum_descriptors_aivg_2fsatellite_2fv1_2faudio_2eproto[3];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_aivg_2fsatellite_2fv1_2faudio_2eproto = nullptr;
 
@@ -173,6 +189,7 @@ const uint32_t TableStruct_aivg_2fsatellite_2fv1_2faudio_2eproto::offsets[] PROT
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::ClientFrame, _impl_._oneof_case_[0]),
   ~0u,  // no _weak_field_map_
   ~0u,  // no _inlined_string_donated_
+  ::_pbi::kInvalidFieldOffsetTag,
   ::_pbi::kInvalidFieldOffsetTag,
   ::_pbi::kInvalidFieldOffsetTag,
   ::_pbi::kInvalidFieldOffsetTag,
@@ -195,6 +212,7 @@ const uint32_t TableStruct_aivg_2fsatellite_2fv1_2faudio_2eproto::offsets[] PROT
   ~0u,  // no _inlined_string_donated_
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::SessionHeader, _impl_.session_id_),
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::SessionHeader, _impl_.downstream_codec_pref_),
+  PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::SessionHeader, _impl_.upstream_codec_pref_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::PcmChunk, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -203,6 +221,14 @@ const uint32_t TableStruct_aivg_2fsatellite_2fv1_2faudio_2eproto::offsets[] PROT
   ~0u,  // no _inlined_string_donated_
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::PcmChunk, _impl_.samples_),
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::PcmChunk, _impl_.ts_ns_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::OpusChunk, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::OpusChunk, _impl_.payload_),
+  PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::OpusChunk, _impl_.ts_ns_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::aivg::satellite::v1::AudioChunk, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -259,15 +285,16 @@ const uint32_t TableStruct_aivg_2fsatellite_2fv1_2faudio_2eproto::offsets[] PROT
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::aivg::satellite::v1::ClientFrame)},
-  { 10, -1, -1, sizeof(::aivg::satellite::v1::ServerFrame)},
-  { 20, -1, -1, sizeof(::aivg::satellite::v1::SessionHeader)},
-  { 28, -1, -1, sizeof(::aivg::satellite::v1::PcmChunk)},
-  { 36, -1, -1, sizeof(::aivg::satellite::v1::AudioChunk)},
-  { 45, -1, -1, sizeof(::aivg::satellite::v1::Transcript)},
-  { 53, 61, -1, sizeof(::aivg::satellite::v1::ClientEvent_AttrsEntry_DoNotUse)},
-  { 63, -1, -1, sizeof(::aivg::satellite::v1::ClientEvent)},
-  { 71, 79, -1, sizeof(::aivg::satellite::v1::ServerEvent_AttrsEntry_DoNotUse)},
-  { 81, -1, -1, sizeof(::aivg::satellite::v1::ServerEvent)},
+  { 11, -1, -1, sizeof(::aivg::satellite::v1::ServerFrame)},
+  { 21, -1, -1, sizeof(::aivg::satellite::v1::SessionHeader)},
+  { 30, -1, -1, sizeof(::aivg::satellite::v1::PcmChunk)},
+  { 38, -1, -1, sizeof(::aivg::satellite::v1::OpusChunk)},
+  { 46, -1, -1, sizeof(::aivg::satellite::v1::AudioChunk)},
+  { 55, -1, -1, sizeof(::aivg::satellite::v1::Transcript)},
+  { 63, 71, -1, sizeof(::aivg::satellite::v1::ClientEvent_AttrsEntry_DoNotUse)},
+  { 73, -1, -1, sizeof(::aivg::satellite::v1::ClientEvent)},
+  { 81, 89, -1, sizeof(::aivg::satellite::v1::ServerEvent_AttrsEntry_DoNotUse)},
+  { 91, -1, -1, sizeof(::aivg::satellite::v1::ServerEvent)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -275,6 +302,7 @@ static const ::_pb::Message* const file_default_instances[] = {
   &::aivg::satellite::v1::_ServerFrame_default_instance_._instance,
   &::aivg::satellite::v1::_SessionHeader_default_instance_._instance,
   &::aivg::satellite::v1::_PcmChunk_default_instance_._instance,
+  &::aivg::satellite::v1::_OpusChunk_default_instance_._instance,
   &::aivg::satellite::v1::_AudioChunk_default_instance_._instance,
   &::aivg::satellite::v1::_Transcript_default_instance_._instance,
   &::aivg::satellite::v1::_ClientEvent_AttrsEntry_DoNotUse_default_instance_._instance,
@@ -285,45 +313,49 @@ static const ::_pb::Message* const file_default_instances[] = {
 
 const char descriptor_table_protodef_aivg_2fsatellite_2fv1_2faudio_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
   "\n\035aivg/satellite/v1/audio.proto\022\021aivg.sa"
-  "tellite.v1\"\247\001\n\013ClientFrame\0223\n\007session\030\001 "
+  "tellite.v1\"\325\001\n\013ClientFrame\0223\n\007session\030\001 "
   "\001(\0132 .aivg.satellite.v1.SessionHeaderH\000\022"
   "*\n\003pcm\030\002 \001(\0132\033.aivg.satellite.v1.PcmChun"
   "kH\000\022/\n\005event\030\003 \001(\0132\036.aivg.satellite.v1.C"
-  "lientEventH\000B\006\n\004body\"\253\001\n\013ServerFrame\022.\n\005"
-  "audio\030\001 \001(\0132\035.aivg.satellite.v1.AudioChu"
-  "nkH\000\022/\n\005event\030\002 \001(\0132\036.aivg.satellite.v1."
-  "ServerEventH\000\0223\n\ntranscript\030\003 \001(\0132\035.aivg"
-  ".satellite.v1.TranscriptH\000B\006\n\004body\"\\\n\rSe"
-  "ssionHeader\022\022\n\nsession_id\030\001 \001(\t\0227\n\025downs"
-  "tream_codec_pref\030\002 \003(\0162\030.aivg.satellite."
-  "v1.Codec\"*\n\010PcmChunk\022\017\n\007samples\030\001 \001(\014\022\r\n"
-  "\005ts_ns\030\002 \001(\004\"S\n\nAudioChunk\022\'\n\005codec\030\001 \001("
-  "\0162\030.aivg.satellite.v1.Codec\022\017\n\007payload\030\002"
-  " \001(\014\022\013\n\003seq\030\003 \001(\004\",\n\nTranscript\022\014\n\004text\030"
-  "\001 \001(\t\022\020\n\010is_final\030\002 \001(\010\"\200\002\n\013ClientEvent\022"
-  "1\n\004kind\030\001 \001(\0162#.aivg.satellite.v1.Client"
-  "Event.Kind\0228\n\005attrs\030\002 \003(\0132).aivg.satelli"
-  "te.v1.ClientEvent.AttrsEntry\032,\n\nAttrsEnt"
-  "ry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"V\n\004Ki"
-  "nd\022\024\n\020KIND_UNSPECIFIED\020\000\022\016\n\nWAKE_FIRED\020\001"
-  "\022\024\n\020END_OF_UTTERANCE\020\002\022\022\n\016BARGE_IN_START"
-  "\020\003\"\202\002\n\013ServerEvent\0221\n\004kind\030\001 \001(\0162#.aivg."
-  "satellite.v1.ServerEvent.Kind\0228\n\005attrs\030\002"
-  " \003(\0132).aivg.satellite.v1.ServerEvent.Att"
-  "rsEntry\032,\n\nAttrsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005va"
-  "lue\030\002 \001(\t:\0028\001\"X\n\004Kind\022\024\n\020KIND_UNSPECIFIE"
-  "D\020\000\022\024\n\020SPEAKING_STARTED\020\001\022\022\n\016SPEAKING_EN"
-  "DED\020\002\022\020\n\014VAD_DETECTED\020\003*G\n\005Codec\022\025\n\021CODE"
-  "C_UNSPECIFIED\020\000\022\016\n\nCODEC_OPUS\020\001\022\027\n\023CODEC"
-  "_PCM_S16LE_16K\020\0022U\n\005Audio\022L\n\006Stream\022\036.ai"
-  "vg.satellite.v1.ClientFrame\032\036.aivg.satel"
-  "lite.v1.ServerFrame(\0010\001b\006proto3"
+  "lientEventH\000\022,\n\004opus\030\004 \001(\0132\034.aivg.satell"
+  "ite.v1.OpusChunkH\000B\006\n\004body\"\253\001\n\013ServerFra"
+  "me\022.\n\005audio\030\001 \001(\0132\035.aivg.satellite.v1.Au"
+  "dioChunkH\000\022/\n\005event\030\002 \001(\0132\036.aivg.satelli"
+  "te.v1.ServerEventH\000\0223\n\ntranscript\030\003 \001(\0132"
+  "\035.aivg.satellite.v1.TranscriptH\000B\006\n\004body"
+  "\"\223\001\n\rSessionHeader\022\022\n\nsession_id\030\001 \001(\t\0227"
+  "\n\025downstream_codec_pref\030\002 \003(\0162\030.aivg.sat"
+  "ellite.v1.Codec\0225\n\023upstream_codec_pref\030\003"
+  " \003(\0162\030.aivg.satellite.v1.Codec\"*\n\010PcmChu"
+  "nk\022\017\n\007samples\030\001 \001(\014\022\r\n\005ts_ns\030\002 \001(\004\"+\n\tOp"
+  "usChunk\022\017\n\007payload\030\001 \001(\014\022\r\n\005ts_ns\030\002 \001(\004\""
+  "S\n\nAudioChunk\022\'\n\005codec\030\001 \001(\0162\030.aivg.sate"
+  "llite.v1.Codec\022\017\n\007payload\030\002 \001(\014\022\013\n\003seq\030\003"
+  " \001(\004\",\n\nTranscript\022\014\n\004text\030\001 \001(\t\022\020\n\010is_f"
+  "inal\030\002 \001(\010\"\200\002\n\013ClientEvent\0221\n\004kind\030\001 \001(\016"
+  "2#.aivg.satellite.v1.ClientEvent.Kind\0228\n"
+  "\005attrs\030\002 \003(\0132).aivg.satellite.v1.ClientE"
+  "vent.AttrsEntry\032,\n\nAttrsEntry\022\013\n\003key\030\001 \001"
+  "(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"V\n\004Kind\022\024\n\020KIND_UN"
+  "SPECIFIED\020\000\022\016\n\nWAKE_FIRED\020\001\022\024\n\020END_OF_UT"
+  "TERANCE\020\002\022\022\n\016BARGE_IN_START\020\003\"\202\002\n\013Server"
+  "Event\0221\n\004kind\030\001 \001(\0162#.aivg.satellite.v1."
+  "ServerEvent.Kind\0228\n\005attrs\030\002 \003(\0132).aivg.s"
+  "atellite.v1.ServerEvent.AttrsEntry\032,\n\nAt"
+  "trsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001"
+  "\"X\n\004Kind\022\024\n\020KIND_UNSPECIFIED\020\000\022\024\n\020SPEAKI"
+  "NG_STARTED\020\001\022\022\n\016SPEAKING_ENDED\020\002\022\020\n\014VAD_"
+  "DETECTED\020\003*G\n\005Codec\022\025\n\021CODEC_UNSPECIFIED"
+  "\020\000\022\016\n\nCODEC_OPUS\020\001\022\027\n\023CODEC_PCM_S16LE_16"
+  "K\020\0022U\n\005Audio\022L\n\006Stream\022\036.aivg.satellite."
+  "v1.ClientFrame\032\036.aivg.satellite.v1.Serve"
+  "rFrame(\0010\001b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto = {
-    false, false, 1351, descriptor_table_protodef_aivg_2fsatellite_2fv1_2faudio_2eproto,
+    false, false, 1498, descriptor_table_protodef_aivg_2fsatellite_2fv1_2faudio_2eproto,
     "aivg/satellite/v1/audio.proto",
-    &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once, nullptr, 0, 10,
+    &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once, nullptr, 0, 11,
     schemas, file_default_instances, TableStruct_aivg_2fsatellite_2fv1_2faudio_2eproto::offsets,
     file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto, file_level_enum_descriptors_aivg_2fsatellite_2fv1_2faudio_2eproto,
     file_level_service_descriptors_aivg_2fsatellite_2fv1_2faudio_2eproto,
@@ -410,6 +442,7 @@ class ClientFrame::_Internal {
   static const ::aivg::satellite::v1::SessionHeader& session(const ClientFrame* msg);
   static const ::aivg::satellite::v1::PcmChunk& pcm(const ClientFrame* msg);
   static const ::aivg::satellite::v1::ClientEvent& event(const ClientFrame* msg);
+  static const ::aivg::satellite::v1::OpusChunk& opus(const ClientFrame* msg);
 };
 
 const ::aivg::satellite::v1::SessionHeader&
@@ -423,6 +456,10 @@ ClientFrame::_Internal::pcm(const ClientFrame* msg) {
 const ::aivg::satellite::v1::ClientEvent&
 ClientFrame::_Internal::event(const ClientFrame* msg) {
   return *msg->_impl_.body_.event_;
+}
+const ::aivg::satellite::v1::OpusChunk&
+ClientFrame::_Internal::opus(const ClientFrame* msg) {
+  return *msg->_impl_.body_.opus_;
 }
 void ClientFrame::set_allocated_session(::aivg::satellite::v1::SessionHeader* session) {
   ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArenaForAllocation();
@@ -469,6 +506,21 @@ void ClientFrame::set_allocated_event(::aivg::satellite::v1::ClientEvent* event)
   }
   // @@protoc_insertion_point(field_set_allocated:aivg.satellite.v1.ClientFrame.event)
 }
+void ClientFrame::set_allocated_opus(::aivg::satellite::v1::OpusChunk* opus) {
+  ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArenaForAllocation();
+  clear_body();
+  if (opus) {
+    ::PROTOBUF_NAMESPACE_ID::Arena* submessage_arena =
+      ::PROTOBUF_NAMESPACE_ID::Arena::InternalGetOwningArena(opus);
+    if (message_arena != submessage_arena) {
+      opus = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
+          message_arena, opus, submessage_arena);
+    }
+    set_has_opus();
+    _impl_.body_.opus_ = opus;
+  }
+  // @@protoc_insertion_point(field_set_allocated:aivg.satellite.v1.ClientFrame.opus)
+}
 ClientFrame::ClientFrame(::PROTOBUF_NAMESPACE_ID::Arena* arena,
                          bool is_message_owned)
   : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
@@ -499,6 +551,11 @@ ClientFrame::ClientFrame(const ClientFrame& from)
     case kEvent: {
       _this->_internal_mutable_event()->::aivg::satellite::v1::ClientEvent::MergeFrom(
           from._internal_event());
+      break;
+    }
+    case kOpus: {
+      _this->_internal_mutable_opus()->::aivg::satellite::v1::OpusChunk::MergeFrom(
+          from._internal_opus());
       break;
     }
     case BODY_NOT_SET: {
@@ -561,6 +618,12 @@ void ClientFrame::clear_body() {
       }
       break;
     }
+    case kOpus: {
+      if (GetArenaForAllocation() == nullptr) {
+        delete _impl_.body_.opus_;
+      }
+      break;
+    }
     case BODY_NOT_SET: {
       break;
     }
@@ -605,6 +668,14 @@ const char* ClientFrame::_InternalParse(const char* ptr, ::_pbi::ParseContext* c
       case 3:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 26)) {
           ptr = ctx->ParseMessage(_internal_mutable_event(), ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // .aivg.satellite.v1.OpusChunk opus = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 34)) {
+          ptr = ctx->ParseMessage(_internal_mutable_opus(), ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -659,6 +730,13 @@ uint8_t* ClientFrame::_InternalSerialize(
         _Internal::event(this).GetCachedSize(), target, stream);
   }
 
+  // .aivg.satellite.v1.OpusChunk opus = 4;
+  if (_internal_has_opus()) {
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::
+      InternalWriteMessage(4, _Internal::opus(this),
+        _Internal::opus(this).GetCachedSize(), target, stream);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -697,6 +775,13 @@ size_t ClientFrame::ByteSizeLong() const {
           *_impl_.body_.event_);
       break;
     }
+    // .aivg.satellite.v1.OpusChunk opus = 4;
+    case kOpus: {
+      total_size += 1 +
+        ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::MessageSize(
+          *_impl_.body_.opus_);
+      break;
+    }
     case BODY_NOT_SET: {
       break;
     }
@@ -733,6 +818,11 @@ void ClientFrame::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PR
     case kEvent: {
       _this->_internal_mutable_event()->::aivg::satellite::v1::ClientEvent::MergeFrom(
           from._internal_event());
+      break;
+    }
+    case kOpus: {
+      _this->_internal_mutable_opus()->::aivg::satellite::v1::OpusChunk::MergeFrom(
+          from._internal_opus());
       break;
     }
     case BODY_NOT_SET: {
@@ -1147,6 +1237,8 @@ SessionHeader::SessionHeader(const SessionHeader& from)
   new (&_impl_) Impl_{
       decltype(_impl_.downstream_codec_pref_){from._impl_.downstream_codec_pref_}
     , /*decltype(_impl_._downstream_codec_pref_cached_byte_size_)*/{0}
+    , decltype(_impl_.upstream_codec_pref_){from._impl_.upstream_codec_pref_}
+    , /*decltype(_impl_._upstream_codec_pref_cached_byte_size_)*/{0}
     , decltype(_impl_.session_id_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
@@ -1169,6 +1261,8 @@ inline void SessionHeader::SharedCtor(
   new (&_impl_) Impl_{
       decltype(_impl_.downstream_codec_pref_){arena}
     , /*decltype(_impl_._downstream_codec_pref_cached_byte_size_)*/{0}
+    , decltype(_impl_.upstream_codec_pref_){arena}
+    , /*decltype(_impl_._upstream_codec_pref_cached_byte_size_)*/{0}
     , decltype(_impl_.session_id_){}
     , /*decltype(_impl_._cached_size_)*/{}
   };
@@ -1190,6 +1284,7 @@ SessionHeader::~SessionHeader() {
 inline void SessionHeader::SharedDtor() {
   GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
   _impl_.downstream_codec_pref_.~RepeatedField();
+  _impl_.upstream_codec_pref_.~RepeatedField();
   _impl_.session_id_.Destroy();
 }
 
@@ -1204,6 +1299,7 @@ void SessionHeader::Clear() {
   (void) cached_has_bits;
 
   _impl_.downstream_codec_pref_.Clear();
+  _impl_.upstream_codec_pref_.Clear();
   _impl_.session_id_.ClearToEmpty();
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
@@ -1233,6 +1329,18 @@ const char* SessionHeader::_InternalParse(const char* ptr, ::_pbi::ParseContext*
           uint64_t val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
           _internal_add_downstream_codec_pref(static_cast<::aivg::satellite::v1::Codec>(val));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated .aivg.satellite.v1.Codec upstream_codec_pref = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 26)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedEnumParser(_internal_mutable_upstream_codec_pref(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 24) {
+          uint64_t val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+          _internal_add_upstream_codec_pref(static_cast<::aivg::satellite::v1::Codec>(val));
         } else
           goto handle_unusual;
         continue;
@@ -1284,6 +1392,15 @@ uint8_t* SessionHeader::_InternalSerialize(
     }
   }
 
+  // repeated .aivg.satellite.v1.Codec upstream_codec_pref = 3;
+  {
+    int byte_size = _impl_._upstream_codec_pref_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteEnumPacked(
+          3, _impl_.upstream_codec_pref_, byte_size, target);
+    }
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1317,6 +1434,23 @@ size_t SessionHeader::ByteSizeLong() const {
     total_size += data_size;
   }
 
+  // repeated .aivg.satellite.v1.Codec upstream_codec_pref = 3;
+  {
+    size_t data_size = 0;
+    unsigned int count = static_cast<unsigned int>(this->_internal_upstream_codec_pref_size());for (unsigned int i = 0; i < count; i++) {
+      data_size += ::_pbi::WireFormatLite::EnumSize(
+        this->_internal_upstream_codec_pref(static_cast<int>(i)));
+    }
+    if (data_size > 0) {
+      total_size += 1 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._upstream_codec_pref_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
   // string session_id = 1;
   if (!this->_internal_session_id().empty()) {
     total_size += 1 +
@@ -1343,6 +1477,7 @@ void SessionHeader::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   (void) cached_has_bits;
 
   _this->_impl_.downstream_codec_pref_.MergeFrom(from._impl_.downstream_codec_pref_);
+  _this->_impl_.upstream_codec_pref_.MergeFrom(from._impl_.upstream_codec_pref_);
   if (!from._internal_session_id().empty()) {
     _this->_internal_set_session_id(from._internal_session_id());
   }
@@ -1366,6 +1501,7 @@ void SessionHeader::InternalSwap(SessionHeader* other) {
   auto* rhs_arena = other->GetArenaForAllocation();
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   _impl_.downstream_codec_pref_.InternalSwap(&other->_impl_.downstream_codec_pref_);
+  _impl_.upstream_codec_pref_.InternalSwap(&other->_impl_.upstream_codec_pref_);
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
       &_impl_.session_id_, lhs_arena,
       &other->_impl_.session_id_, rhs_arena
@@ -1601,6 +1737,231 @@ void PcmChunk::InternalSwap(PcmChunk* other) {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
       file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[3]);
+}
+
+// ===================================================================
+
+class OpusChunk::_Internal {
+ public:
+};
+
+OpusChunk::OpusChunk(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:aivg.satellite.v1.OpusChunk)
+}
+OpusChunk::OpusChunk(const OpusChunk& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  OpusChunk* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.payload_){}
+    , decltype(_impl_.ts_ns_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  _impl_.payload_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.payload_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_payload().empty()) {
+    _this->_impl_.payload_.Set(from._internal_payload(), 
+      _this->GetArenaForAllocation());
+  }
+  _this->_impl_.ts_ns_ = from._impl_.ts_ns_;
+  // @@protoc_insertion_point(copy_constructor:aivg.satellite.v1.OpusChunk)
+}
+
+inline void OpusChunk::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.payload_){}
+    , decltype(_impl_.ts_ns_){uint64_t{0u}}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+  _impl_.payload_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.payload_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+}
+
+OpusChunk::~OpusChunk() {
+  // @@protoc_insertion_point(destructor:aivg.satellite.v1.OpusChunk)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void OpusChunk::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.payload_.Destroy();
+}
+
+void OpusChunk::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void OpusChunk::Clear() {
+// @@protoc_insertion_point(message_clear_start:aivg.satellite.v1.OpusChunk)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.payload_.ClearToEmpty();
+  _impl_.ts_ns_ = uint64_t{0u};
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* OpusChunk::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // bytes payload = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
+          auto str = _internal_mutable_payload();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 ts_ns = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
+          _impl_.ts_ns_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* OpusChunk::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:aivg.satellite.v1.OpusChunk)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // bytes payload = 1;
+  if (!this->_internal_payload().empty()) {
+    target = stream->WriteBytesMaybeAliased(
+        1, this->_internal_payload(), target);
+  }
+
+  // uint64 ts_ns = 2;
+  if (this->_internal_ts_ns() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(2, this->_internal_ts_ns(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:aivg.satellite.v1.OpusChunk)
+  return target;
+}
+
+size_t OpusChunk::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:aivg.satellite.v1.OpusChunk)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // bytes payload = 1;
+  if (!this->_internal_payload().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::BytesSize(
+        this->_internal_payload());
+  }
+
+  // uint64 ts_ns = 2;
+  if (this->_internal_ts_ns() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_ts_ns());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData OpusChunk::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    OpusChunk::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*OpusChunk::GetClassData() const { return &_class_data_; }
+
+
+void OpusChunk::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<OpusChunk*>(&to_msg);
+  auto& from = static_cast<const OpusChunk&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:aivg.satellite.v1.OpusChunk)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (!from._internal_payload().empty()) {
+    _this->_internal_set_payload(from._internal_payload());
+  }
+  if (from._internal_ts_ns() != 0) {
+    _this->_internal_set_ts_ns(from._internal_ts_ns());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void OpusChunk::CopyFrom(const OpusChunk& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:aivg.satellite.v1.OpusChunk)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool OpusChunk::IsInitialized() const {
+  return true;
+}
+
+void OpusChunk::InternalSwap(OpusChunk* other) {
+  using std::swap;
+  auto* lhs_arena = GetArenaForAllocation();
+  auto* rhs_arena = other->GetArenaForAllocation();
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.payload_, lhs_arena,
+      &other->_impl_.payload_, rhs_arena
+  );
+  swap(_impl_.ts_ns_, other->_impl_.ts_ns_);
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata OpusChunk::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[4]);
 }
 
 // ===================================================================
@@ -1861,7 +2222,7 @@ void AudioChunk::InternalSwap(AudioChunk* other) {
 ::PROTOBUF_NAMESPACE_ID::Metadata AudioChunk::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
-      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[4]);
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[5]);
 }
 
 // ===================================================================
@@ -2091,7 +2452,7 @@ void Transcript::InternalSwap(Transcript* other) {
 ::PROTOBUF_NAMESPACE_ID::Metadata Transcript::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
-      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[5]);
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[6]);
 }
 
 // ===================================================================
@@ -2105,7 +2466,7 @@ void ClientEvent_AttrsEntry_DoNotUse::MergeFrom(const ClientEvent_AttrsEntry_DoN
 ::PROTOBUF_NAMESPACE_ID::Metadata ClientEvent_AttrsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
-      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[6]);
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[7]);
 }
 
 // ===================================================================
@@ -2354,7 +2715,7 @@ void ClientEvent::InternalSwap(ClientEvent* other) {
 ::PROTOBUF_NAMESPACE_ID::Metadata ClientEvent::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
-      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[7]);
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[8]);
 }
 
 // ===================================================================
@@ -2368,7 +2729,7 @@ void ServerEvent_AttrsEntry_DoNotUse::MergeFrom(const ServerEvent_AttrsEntry_DoN
 ::PROTOBUF_NAMESPACE_ID::Metadata ServerEvent_AttrsEntry_DoNotUse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
-      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[8]);
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[9]);
 }
 
 // ===================================================================
@@ -2617,7 +2978,7 @@ void ServerEvent::InternalSwap(ServerEvent* other) {
 ::PROTOBUF_NAMESPACE_ID::Metadata ServerEvent::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_getter, &descriptor_table_aivg_2fsatellite_2fv1_2faudio_2eproto_once,
-      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[9]);
+      file_level_metadata_aivg_2fsatellite_2fv1_2faudio_2eproto[10]);
 }
 
 // @@protoc_insertion_point(namespace_scope)
@@ -2640,6 +3001,10 @@ Arena::CreateMaybeMessage< ::aivg::satellite::v1::SessionHeader >(Arena* arena) 
 template<> PROTOBUF_NOINLINE ::aivg::satellite::v1::PcmChunk*
 Arena::CreateMaybeMessage< ::aivg::satellite::v1::PcmChunk >(Arena* arena) {
   return Arena::CreateMessageInternal< ::aivg::satellite::v1::PcmChunk >(arena);
+}
+template<> PROTOBUF_NOINLINE ::aivg::satellite::v1::OpusChunk*
+Arena::CreateMaybeMessage< ::aivg::satellite::v1::OpusChunk >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::aivg::satellite::v1::OpusChunk >(arena);
 }
 template<> PROTOBUF_NOINLINE ::aivg::satellite::v1::AudioChunk*
 Arena::CreateMaybeMessage< ::aivg::satellite::v1::AudioChunk >(Arena* arena) {

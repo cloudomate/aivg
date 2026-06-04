@@ -84,6 +84,12 @@ bool GrpcTransport::begin() {
   if (opts_.downstream_pref != Codec::PcmS16le16k) {
     sh->add_downstream_codec_pref(pb::CODEC_PCM_S16LE_16K);
   }
+  // Feature 025: advertise the upstream (mic) codec the device will send,
+  // best-first, with raw 16 kHz PCM as the guaranteed fallback.
+  sh->add_upstream_codec_pref(to_proto_codec(opts_.upstream_pref));
+  if (opts_.upstream_pref != Codec::PcmS16le16k) {
+    sh->add_upstream_codec_pref(pb::CODEC_PCM_S16LE_16K);
+  }
   {
     std::lock_guard<std::mutex> lk(impl_->write_mu);
     if (!impl_->stream->Write(hdr)) return false;
@@ -96,10 +102,20 @@ bool GrpcTransport::begin() {
 void GrpcTransport::send_mic(const std::int16_t* pcm16, std::size_t samples) {
   if (!ready_.load() || stopping_.load() || pcm16 == nullptr || samples == 0) return;
   pb::ClientFrame f;
-  auto* pcm = f.mutable_pcm();
-  // Raw 16 kHz s16le PCM — NO on-device Opus encode on the gRPC path (R-3).
-  pcm->set_samples(reinterpret_cast<const char*>(pcm16), samples * sizeof(std::int16_t));
-  pcm->set_ts_ns(now_ns());
+  if (opts_.upstream_pref == Codec::Opus) {
+    // Feature 025: Opus-encode the 48 kHz mic frame on-device (960 samples ->
+    // one packet) and send the `opus` arm — compressed uplink, no decimation.
+    auto packet = mic_enc_.encode(pcm16, samples);
+    if (packet.empty()) return;  // encode error -> skip this frame
+    auto* op = f.mutable_opus();
+    op->set_payload(reinterpret_cast<const char*>(packet.data()), packet.size());
+    op->set_ts_ns(now_ns());
+  } else {
+    // Raw 16 kHz s16le PCM (default/fallback).
+    auto* pcm = f.mutable_pcm();
+    pcm->set_samples(reinterpret_cast<const char*>(pcm16), samples * sizeof(std::int16_t));
+    pcm->set_ts_ns(now_ns());
+  }
   std::lock_guard<std::mutex> lk(impl_->write_mu);
   if (impl_->stream) impl_->stream->Write(f);
 }

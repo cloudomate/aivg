@@ -28,6 +28,7 @@ message ClientFrame {
     SessionHeader session = 1;  // first frame ONLY
     PcmChunk      pcm     = 2;  // 16 kHz int16 LE mono, 20 ms (640 B) frames
     ClientEvent   event   = 3;  // wake / end-of-utterance / barge-in
+    OpusChunk     opus    = 4;  // Opus-encoded 48 kHz mic frame (feature 025)
   }
 }
 
@@ -47,10 +48,18 @@ message SessionHeader {
   // Client's downstream-codec preference, best-first. Gateway picks the first
   // it supports (FR-009); empty => gateway default (PCM_S16LE_16K).
   repeated Codec downstream_codec_pref = 2;
+  // Client's UPSTREAM (mic) codec preference, best-first (feature 025). May
+  // include CODEC_OPUS to send the Opus mic arm; empty => raw PcmChunk (16 kHz).
+  repeated Codec upstream_codec_pref = 3;
 }
 
 message PcmChunk {
   bytes  samples = 1;  // raw int16 LE PCM, 16 kHz mono
+  uint64 ts_ns   = 2;  // capture timestamp (monotonic, ns)
+}
+
+message OpusChunk {
+  bytes  payload = 1;  // one Opus packet, 20 ms @ 48 kHz mono (feature 025)
   uint64 ts_ns   = 2;  // capture timestamp (monotonic, ns)
 }
 

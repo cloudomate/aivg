@@ -128,6 +128,11 @@ if(AIVG_SAT_ENABLE_GRPC)
     src/transport/grpc_transport.cpp
     src/grpc/_generated/aivg/satellite/v1/audio.pb.cc
     src/grpc/_generated/aivg/satellite/v1/audio.grpc.pb.cc)
+  # Feature 025: GrpcTransport encodes the mic with OpusBridge. Compile it here
+  # if the voice plane didn't already (a gRPC-only / voice-off build).
+  if(NOT AIVG_SAT_ENABLE_VOICE)
+    list(APPEND AIVG_SAT_CORE_SOURCES src/transport/opus_bridge.cpp)
+  endif()
   set(AIVG_SAT_HAVE_GRPC ON)
 endif()
 
@@ -151,6 +156,14 @@ if(AIVG_SAT_HAVE_GRPC)
     ${CMAKE_CURRENT_SOURCE_DIR}/src/grpc/_generated ${GRPCPP_INCLUDE_DIRS} ${PROTOBUF_INCLUDE_DIRS})
   target_link_libraries(aivg_sat PRIVATE ${GRPCPP_LIBRARIES} ${PROTOBUF_LIBRARIES})
   target_compile_definitions(aivg_sat PRIVATE AIVG_SAT_HAVE_GRPC=1)
+  # Feature 024/025: OpusBridge (downstream decode + upstream mic encode) needs
+  # libopus linked even on a gRPC-only (voice-off) build.
+  if(NOT AIVG_SAT_ENABLE_VOICE)
+    find_library(GRPC_OPUS_LIB opus)
+    if(GRPC_OPUS_LIB)
+      target_link_libraries(aivg_sat PRIVATE ${GRPC_OPUS_LIB})
+    endif()
+  endif()
 endif()
 
 # --- Dependencies (enabled as integration tasks T012-T020 land) --------------

@@ -63,6 +63,9 @@ extern ClientEvent_AttrsEntry_DoNotUseDefaultTypeInternal _ClientEvent_AttrsEntr
 class ClientFrame;
 struct ClientFrameDefaultTypeInternal;
 extern ClientFrameDefaultTypeInternal _ClientFrame_default_instance_;
+class OpusChunk;
+struct OpusChunkDefaultTypeInternal;
+extern OpusChunkDefaultTypeInternal _OpusChunk_default_instance_;
 class PcmChunk;
 struct PcmChunkDefaultTypeInternal;
 extern PcmChunkDefaultTypeInternal _PcmChunk_default_instance_;
@@ -89,6 +92,7 @@ template<> ::aivg::satellite::v1::AudioChunk* Arena::CreateMaybeMessage<::aivg::
 template<> ::aivg::satellite::v1::ClientEvent* Arena::CreateMaybeMessage<::aivg::satellite::v1::ClientEvent>(Arena*);
 template<> ::aivg::satellite::v1::ClientEvent_AttrsEntry_DoNotUse* Arena::CreateMaybeMessage<::aivg::satellite::v1::ClientEvent_AttrsEntry_DoNotUse>(Arena*);
 template<> ::aivg::satellite::v1::ClientFrame* Arena::CreateMaybeMessage<::aivg::satellite::v1::ClientFrame>(Arena*);
+template<> ::aivg::satellite::v1::OpusChunk* Arena::CreateMaybeMessage<::aivg::satellite::v1::OpusChunk>(Arena*);
 template<> ::aivg::satellite::v1::PcmChunk* Arena::CreateMaybeMessage<::aivg::satellite::v1::PcmChunk>(Arena*);
 template<> ::aivg::satellite::v1::ServerEvent* Arena::CreateMaybeMessage<::aivg::satellite::v1::ServerEvent>(Arena*);
 template<> ::aivg::satellite::v1::ServerEvent_AttrsEntry_DoNotUse* Arena::CreateMaybeMessage<::aivg::satellite::v1::ServerEvent_AttrsEntry_DoNotUse>(Arena*);
@@ -229,6 +233,7 @@ class ClientFrame final :
     kSession = 1,
     kPcm = 2,
     kEvent = 3,
+    kOpus = 4,
     BODY_NOT_SET = 0,
   };
 
@@ -313,6 +318,7 @@ class ClientFrame final :
     kSessionFieldNumber = 1,
     kPcmFieldNumber = 2,
     kEventFieldNumber = 3,
+    kOpusFieldNumber = 4,
   };
   // .aivg.satellite.v1.SessionHeader session = 1;
   bool has_session() const;
@@ -368,6 +374,24 @@ class ClientFrame final :
       ::aivg::satellite::v1::ClientEvent* event);
   ::aivg::satellite::v1::ClientEvent* unsafe_arena_release_event();
 
+  // .aivg.satellite.v1.OpusChunk opus = 4;
+  bool has_opus() const;
+  private:
+  bool _internal_has_opus() const;
+  public:
+  void clear_opus();
+  const ::aivg::satellite::v1::OpusChunk& opus() const;
+  PROTOBUF_NODISCARD ::aivg::satellite::v1::OpusChunk* release_opus();
+  ::aivg::satellite::v1::OpusChunk* mutable_opus();
+  void set_allocated_opus(::aivg::satellite::v1::OpusChunk* opus);
+  private:
+  const ::aivg::satellite::v1::OpusChunk& _internal_opus() const;
+  ::aivg::satellite::v1::OpusChunk* _internal_mutable_opus();
+  public:
+  void unsafe_arena_set_allocated_opus(
+      ::aivg::satellite::v1::OpusChunk* opus);
+  ::aivg::satellite::v1::OpusChunk* unsafe_arena_release_opus();
+
   void clear_body();
   BodyCase body_case() const;
   // @@protoc_insertion_point(class_scope:aivg.satellite.v1.ClientFrame)
@@ -376,6 +400,7 @@ class ClientFrame final :
   void set_has_session();
   void set_has_pcm();
   void set_has_event();
+  void set_has_opus();
 
   inline bool has_body() const;
   inline void clear_has_body();
@@ -390,6 +415,7 @@ class ClientFrame final :
       ::aivg::satellite::v1::SessionHeader* session_;
       ::aivg::satellite::v1::PcmChunk* pcm_;
       ::aivg::satellite::v1::ClientEvent* event_;
+      ::aivg::satellite::v1::OpusChunk* opus_;
     } body_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
     uint32_t _oneof_case_[1];
@@ -740,6 +766,7 @@ class SessionHeader final :
 
   enum : int {
     kDownstreamCodecPrefFieldNumber = 2,
+    kUpstreamCodecPrefFieldNumber = 3,
     kSessionIdFieldNumber = 1,
   };
   // repeated .aivg.satellite.v1.Codec downstream_codec_pref = 2;
@@ -758,6 +785,23 @@ class SessionHeader final :
   void add_downstream_codec_pref(::aivg::satellite::v1::Codec value);
   const ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>& downstream_codec_pref() const;
   ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>* mutable_downstream_codec_pref();
+
+  // repeated .aivg.satellite.v1.Codec upstream_codec_pref = 3;
+  int upstream_codec_pref_size() const;
+  private:
+  int _internal_upstream_codec_pref_size() const;
+  public:
+  void clear_upstream_codec_pref();
+  private:
+  ::aivg::satellite::v1::Codec _internal_upstream_codec_pref(int index) const;
+  void _internal_add_upstream_codec_pref(::aivg::satellite::v1::Codec value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>* _internal_mutable_upstream_codec_pref();
+  public:
+  ::aivg::satellite::v1::Codec upstream_codec_pref(int index) const;
+  void set_upstream_codec_pref(int index, ::aivg::satellite::v1::Codec value);
+  void add_upstream_codec_pref(::aivg::satellite::v1::Codec value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>& upstream_codec_pref() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>* mutable_upstream_codec_pref();
 
   // string session_id = 1;
   void clear_session_id();
@@ -783,6 +827,8 @@ class SessionHeader final :
   struct Impl_ {
     ::PROTOBUF_NAMESPACE_ID::RepeatedField<int> downstream_codec_pref_;
     mutable std::atomic<int> _downstream_codec_pref_cached_byte_size_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedField<int> upstream_codec_pref_;
+    mutable std::atomic<int> _upstream_codec_pref_cached_byte_size_;
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr session_id_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
@@ -955,6 +1001,170 @@ class PcmChunk final :
 };
 // -------------------------------------------------------------------
 
+class OpusChunk final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:aivg.satellite.v1.OpusChunk) */ {
+ public:
+  inline OpusChunk() : OpusChunk(nullptr) {}
+  ~OpusChunk() override;
+  explicit PROTOBUF_CONSTEXPR OpusChunk(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  OpusChunk(const OpusChunk& from);
+  OpusChunk(OpusChunk&& from) noexcept
+    : OpusChunk() {
+    *this = ::std::move(from);
+  }
+
+  inline OpusChunk& operator=(const OpusChunk& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline OpusChunk& operator=(OpusChunk&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const OpusChunk& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const OpusChunk* internal_default_instance() {
+    return reinterpret_cast<const OpusChunk*>(
+               &_OpusChunk_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    4;
+
+  friend void swap(OpusChunk& a, OpusChunk& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(OpusChunk* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(OpusChunk* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  OpusChunk* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<OpusChunk>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const OpusChunk& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const OpusChunk& from) {
+    OpusChunk::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(OpusChunk* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "aivg.satellite.v1.OpusChunk";
+  }
+  protected:
+  explicit OpusChunk(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kPayloadFieldNumber = 1,
+    kTsNsFieldNumber = 2,
+  };
+  // bytes payload = 1;
+  void clear_payload();
+  const std::string& payload() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_payload(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_payload();
+  PROTOBUF_NODISCARD std::string* release_payload();
+  void set_allocated_payload(std::string* payload);
+  private:
+  const std::string& _internal_payload() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_payload(const std::string& value);
+  std::string* _internal_mutable_payload();
+  public:
+
+  // uint64 ts_ns = 2;
+  void clear_ts_ns();
+  uint64_t ts_ns() const;
+  void set_ts_ns(uint64_t value);
+  private:
+  uint64_t _internal_ts_ns() const;
+  void _internal_set_ts_ns(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:aivg.satellite.v1.OpusChunk)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr payload_;
+    uint64_t ts_ns_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_aivg_2fsatellite_2fv1_2faudio_2eproto;
+};
+// -------------------------------------------------------------------
+
 class AudioChunk final :
     public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:aivg.satellite.v1.AudioChunk) */ {
  public:
@@ -1003,7 +1213,7 @@ class AudioChunk final :
                &_AudioChunk_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    4;
+    5;
 
   friend void swap(AudioChunk& a, AudioChunk& b) {
     a.Swap(&b);
@@ -1178,7 +1388,7 @@ class Transcript final :
                &_Transcript_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    5;
+    6;
 
   friend void swap(Transcript& a, Transcript& b) {
     a.Swap(&b);
@@ -1370,7 +1580,7 @@ class ClientEvent final :
                &_ClientEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    7;
+    8;
 
   friend void swap(ClientEvent& a, ClientEvent& b) {
     a.Swap(&b);
@@ -1606,7 +1816,7 @@ class ServerEvent final :
                &_ServerEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    9;
+    10;
 
   friend void swap(ServerEvent& a, ServerEvent& b) {
     a.Swap(&b);
@@ -1997,6 +2207,80 @@ inline ::aivg::satellite::v1::ClientEvent* ClientFrame::mutable_event() {
   return _msg;
 }
 
+// .aivg.satellite.v1.OpusChunk opus = 4;
+inline bool ClientFrame::_internal_has_opus() const {
+  return body_case() == kOpus;
+}
+inline bool ClientFrame::has_opus() const {
+  return _internal_has_opus();
+}
+inline void ClientFrame::set_has_opus() {
+  _impl_._oneof_case_[0] = kOpus;
+}
+inline void ClientFrame::clear_opus() {
+  if (_internal_has_opus()) {
+    if (GetArenaForAllocation() == nullptr) {
+      delete _impl_.body_.opus_;
+    }
+    clear_has_body();
+  }
+}
+inline ::aivg::satellite::v1::OpusChunk* ClientFrame::release_opus() {
+  // @@protoc_insertion_point(field_release:aivg.satellite.v1.ClientFrame.opus)
+  if (_internal_has_opus()) {
+    clear_has_body();
+    ::aivg::satellite::v1::OpusChunk* temp = _impl_.body_.opus_;
+    if (GetArenaForAllocation() != nullptr) {
+      temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+    }
+    _impl_.body_.opus_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline const ::aivg::satellite::v1::OpusChunk& ClientFrame::_internal_opus() const {
+  return _internal_has_opus()
+      ? *_impl_.body_.opus_
+      : reinterpret_cast< ::aivg::satellite::v1::OpusChunk&>(::aivg::satellite::v1::_OpusChunk_default_instance_);
+}
+inline const ::aivg::satellite::v1::OpusChunk& ClientFrame::opus() const {
+  // @@protoc_insertion_point(field_get:aivg.satellite.v1.ClientFrame.opus)
+  return _internal_opus();
+}
+inline ::aivg::satellite::v1::OpusChunk* ClientFrame::unsafe_arena_release_opus() {
+  // @@protoc_insertion_point(field_unsafe_arena_release:aivg.satellite.v1.ClientFrame.opus)
+  if (_internal_has_opus()) {
+    clear_has_body();
+    ::aivg::satellite::v1::OpusChunk* temp = _impl_.body_.opus_;
+    _impl_.body_.opus_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline void ClientFrame::unsafe_arena_set_allocated_opus(::aivg::satellite::v1::OpusChunk* opus) {
+  clear_body();
+  if (opus) {
+    set_has_opus();
+    _impl_.body_.opus_ = opus;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:aivg.satellite.v1.ClientFrame.opus)
+}
+inline ::aivg::satellite::v1::OpusChunk* ClientFrame::_internal_mutable_opus() {
+  if (!_internal_has_opus()) {
+    clear_body();
+    set_has_opus();
+    _impl_.body_.opus_ = CreateMaybeMessage< ::aivg::satellite::v1::OpusChunk >(GetArenaForAllocation());
+  }
+  return _impl_.body_.opus_;
+}
+inline ::aivg::satellite::v1::OpusChunk* ClientFrame::mutable_opus() {
+  ::aivg::satellite::v1::OpusChunk* _msg = _internal_mutable_opus();
+  // @@protoc_insertion_point(field_mutable:aivg.satellite.v1.ClientFrame.opus)
+  return _msg;
+}
+
 inline bool ClientFrame::has_body() const {
   return body_case() != BODY_NOT_SET;
 }
@@ -2338,6 +2622,49 @@ SessionHeader::mutable_downstream_codec_pref() {
   return _internal_mutable_downstream_codec_pref();
 }
 
+// repeated .aivg.satellite.v1.Codec upstream_codec_pref = 3;
+inline int SessionHeader::_internal_upstream_codec_pref_size() const {
+  return _impl_.upstream_codec_pref_.size();
+}
+inline int SessionHeader::upstream_codec_pref_size() const {
+  return _internal_upstream_codec_pref_size();
+}
+inline void SessionHeader::clear_upstream_codec_pref() {
+  _impl_.upstream_codec_pref_.Clear();
+}
+inline ::aivg::satellite::v1::Codec SessionHeader::_internal_upstream_codec_pref(int index) const {
+  return static_cast< ::aivg::satellite::v1::Codec >(_impl_.upstream_codec_pref_.Get(index));
+}
+inline ::aivg::satellite::v1::Codec SessionHeader::upstream_codec_pref(int index) const {
+  // @@protoc_insertion_point(field_get:aivg.satellite.v1.SessionHeader.upstream_codec_pref)
+  return _internal_upstream_codec_pref(index);
+}
+inline void SessionHeader::set_upstream_codec_pref(int index, ::aivg::satellite::v1::Codec value) {
+  _impl_.upstream_codec_pref_.Set(index, value);
+  // @@protoc_insertion_point(field_set:aivg.satellite.v1.SessionHeader.upstream_codec_pref)
+}
+inline void SessionHeader::_internal_add_upstream_codec_pref(::aivg::satellite::v1::Codec value) {
+  _impl_.upstream_codec_pref_.Add(value);
+}
+inline void SessionHeader::add_upstream_codec_pref(::aivg::satellite::v1::Codec value) {
+  _internal_add_upstream_codec_pref(value);
+  // @@protoc_insertion_point(field_add:aivg.satellite.v1.SessionHeader.upstream_codec_pref)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>&
+SessionHeader::upstream_codec_pref() const {
+  // @@protoc_insertion_point(field_list:aivg.satellite.v1.SessionHeader.upstream_codec_pref)
+  return _impl_.upstream_codec_pref_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>*
+SessionHeader::_internal_mutable_upstream_codec_pref() {
+  return &_impl_.upstream_codec_pref_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField<int>*
+SessionHeader::mutable_upstream_codec_pref() {
+  // @@protoc_insertion_point(field_mutable_list:aivg.satellite.v1.SessionHeader.upstream_codec_pref)
+  return _internal_mutable_upstream_codec_pref();
+}
+
 // -------------------------------------------------------------------
 
 // PcmChunk
@@ -2410,6 +2737,80 @@ inline void PcmChunk::_internal_set_ts_ns(uint64_t value) {
 inline void PcmChunk::set_ts_ns(uint64_t value) {
   _internal_set_ts_ns(value);
   // @@protoc_insertion_point(field_set:aivg.satellite.v1.PcmChunk.ts_ns)
+}
+
+// -------------------------------------------------------------------
+
+// OpusChunk
+
+// bytes payload = 1;
+inline void OpusChunk::clear_payload() {
+  _impl_.payload_.ClearToEmpty();
+}
+inline const std::string& OpusChunk::payload() const {
+  // @@protoc_insertion_point(field_get:aivg.satellite.v1.OpusChunk.payload)
+  return _internal_payload();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void OpusChunk::set_payload(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.payload_.SetBytes(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:aivg.satellite.v1.OpusChunk.payload)
+}
+inline std::string* OpusChunk::mutable_payload() {
+  std::string* _s = _internal_mutable_payload();
+  // @@protoc_insertion_point(field_mutable:aivg.satellite.v1.OpusChunk.payload)
+  return _s;
+}
+inline const std::string& OpusChunk::_internal_payload() const {
+  return _impl_.payload_.Get();
+}
+inline void OpusChunk::_internal_set_payload(const std::string& value) {
+  
+  _impl_.payload_.Set(value, GetArenaForAllocation());
+}
+inline std::string* OpusChunk::_internal_mutable_payload() {
+  
+  return _impl_.payload_.Mutable(GetArenaForAllocation());
+}
+inline std::string* OpusChunk::release_payload() {
+  // @@protoc_insertion_point(field_release:aivg.satellite.v1.OpusChunk.payload)
+  return _impl_.payload_.Release();
+}
+inline void OpusChunk::set_allocated_payload(std::string* payload) {
+  if (payload != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.payload_.SetAllocated(payload, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.payload_.IsDefault()) {
+    _impl_.payload_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:aivg.satellite.v1.OpusChunk.payload)
+}
+
+// uint64 ts_ns = 2;
+inline void OpusChunk::clear_ts_ns() {
+  _impl_.ts_ns_ = uint64_t{0u};
+}
+inline uint64_t OpusChunk::_internal_ts_ns() const {
+  return _impl_.ts_ns_;
+}
+inline uint64_t OpusChunk::ts_ns() const {
+  // @@protoc_insertion_point(field_get:aivg.satellite.v1.OpusChunk.ts_ns)
+  return _internal_ts_ns();
+}
+inline void OpusChunk::_internal_set_ts_ns(uint64_t value) {
+  
+  _impl_.ts_ns_ = value;
+}
+inline void OpusChunk::set_ts_ns(uint64_t value) {
+  _internal_set_ts_ns(value);
+  // @@protoc_insertion_point(field_set:aivg.satellite.v1.OpusChunk.ts_ns)
 }
 
 // -------------------------------------------------------------------
@@ -2693,6 +3094,8 @@ ServerEvent::mutable_attrs() {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

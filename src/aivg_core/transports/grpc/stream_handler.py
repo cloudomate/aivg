@@ -122,6 +122,8 @@ async def _read_inbound(
             body = frame.WhichOneof("body")
             if body == "pcm":
                 adapter.push_inbound(frame.pcm.samples)
+            elif body == "opus":
+                adapter.push_inbound_opus(frame.opus.payload)  # feature 025
             elif body == "event":
                 kind = frame.event.kind
                 if kind == _ClientEvent.END_OF_UTTERANCE:

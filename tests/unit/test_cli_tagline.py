@@ -33,19 +33,19 @@ def test_version_json_envelope():
     assert env["v"] == 1
     assert "version" in env["data"]
     # Feature 018 reset the contract to 0.2.0 (public baseline); feature 021
-    # bumps to 0.3.0 (ADDITIVE — adds the "grpc" transport). History:
-    # 1.0.0 → (017) 1.1.0 → (018) 0.2.0 → (021) 0.3.0.
-    assert env["data"]["contract_version"] == "0.3.0"
+    # bumps to 0.4.0 (ADDITIVE — adds the upstream Opus mic arm). History:
+    # 1.0.0 → (017) 1.1.0 → (018) 0.2.0 → (021) 0.3.0 → (025) 0.4.0.
+    assert env["data"]["contract_version"] == "0.4.0"
 
 
 def test_contract_version_at_post_021_baseline():
-    """Feature 021: the wire-contract version is 0.3.0 — an additive bump
+    """Feature 025: the wire-contract version is 0.4.0 — an additive bump
     over the 018 public baseline (0.2.0) that adds the gRPC transport. The
     transports list MUST enumerate which wires the gateway can speak."""
     res = _aivg("--json", "--contract-version")
     assert res.returncode == 0
     env = json.loads(res.stdout.strip().splitlines()[-1])
-    assert env["data"]["contract_version"] == "0.3.0"
+    assert env["data"]["contract_version"] == "0.4.0"
     transports = env["data"].get("transports", [])
     assert "webrtc" in transports
     assert "esphome_api" in transports

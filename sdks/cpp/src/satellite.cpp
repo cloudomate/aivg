@@ -123,6 +123,9 @@ std::unique_ptr<detail::Transport> make_voice_transport(const SatelliteOptions& 
     // caller opts out; 16 kHz PCM is advertised as a fallback either way.
     g.downstream_pref =
         o.grpc_downstream_opus ? detail::Codec::Opus : detail::Codec::PcmS16le16k;
+    // Feature 025 — Opus-compress the mic uplink when opted in; PCM otherwise.
+    g.upstream_pref =
+        o.grpc_upstream_opus ? detail::Codec::Opus : detail::Codec::PcmS16le16k;
     return std::make_unique<detail::GrpcTransport>(std::move(g));
   }
 #endif

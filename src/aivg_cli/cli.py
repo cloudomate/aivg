@@ -37,8 +37,10 @@ from .stream import stream_log_entries
 # that "1.0.0"). Feature 021 bumps to 0.3.0 — ADDITIVE minor: the build now
 # advertises a third transport ("grpc") alongside webrtc + esphome_api. Same
 # shape as feature 017's 1.0.0→1.1.0 ESPHome additive bump; existing
-# webrtc/esphome clients are unaffected.
-CONTRACT_VERSION = "0.3.0"
+# webrtc/esphome clients are unaffected. Feature 025 bumps to 0.4.0 — ADDITIVE:
+# adds the upstream Opus mic arm (ClientFrame.opus) + SessionHeader.upstream_codec_pref;
+# old peers ignore the new arm and stay on raw 16 kHz PCM.
+CONTRACT_VERSION = "0.4.0"
 # The transports list is REPORTED by the gateway at runtime (it knows which
 # listeners are bound). The CLI-side hint emits the full build-supported set
 # (a "what transports CAN the gateway speak?" hint) — sourced from the core
