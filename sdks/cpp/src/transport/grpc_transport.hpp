@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 
+#include "transport/opus_bridge.hpp"
 #include "transport/transport.hpp"
 
 namespace aivg::sat::detail {
@@ -31,6 +32,10 @@ struct GrpcTransportOptions {
   // 16 kHz PCM is always advertised as a fallback. Defaults to Opus for the
   // native tier (the rpi-pipewire reference rig plays at 48 kHz).
   Codec downstream_pref = Codec::Opus;
+  // Preferred UPSTREAM (mic) codec (feature 025). Opus → encode the 48 kHz mic
+  // on-device (OpusBridge) and send the `opus` arm (compressed uplink, no
+  // on-device decimation); PcmS16le16k → raw 16 kHz PCM (the default/fallback).
+  Codec upstream_pref = Codec::PcmS16le16k;
 };
 
 // A client lifecycle signal pushed up the audio stream (FR maps to proto
@@ -48,8 +53,11 @@ class GrpcTransport : public Transport {
 
   bool begin() override;
   const std::string& session_id() const noexcept override { return opts_.session_id; }
-  // 16 kHz * 20 ms = 320 samples per upstream PcmChunk.
-  std::size_t mic_frame_samples() const noexcept override { return 320; }
+  // Feature 025: negotiation-dependent mic capture rate (no on-device resampler).
+  // Opus upstream → 48 kHz (960 samples/20 ms); PCM upstream → 16 kHz (320).
+  std::size_t mic_frame_samples() const noexcept override {
+    return opts_.upstream_pref == Codec::Opus ? 960 : 320;
+  }
   void send_mic(const std::int16_t* pcm16, std::size_t samples) override;
   bool ready() const noexcept override { return ready_.load(); }
   void stop() override;
@@ -66,6 +74,7 @@ class GrpcTransport : public Transport {
 
   GrpcTransportOptions opts_;
   std::unique_ptr<Impl> impl_;
+  OpusBridge mic_enc_;         // feature 025: on-device 48 kHz mic Opus encode
   std::thread reader_;
   std::atomic<bool> ready_{false};
   std::atomic<bool> stopping_{false};

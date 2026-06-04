@@ -65,6 +65,10 @@ class GrpcMediaAdapter:
         self._upsample_state: Optional[bytes] = None
         self._downsample_state: Optional[bytes] = None
         self._reframe_buf = bytearray()
+        # Feature 025: upstream Opus mic arm — lazily-created 48 kHz decoder +
+        # its own 20 ms reframe buffer (independent of the PCM upsample path).
+        self._opus_dec = None
+        self._opus_reframe_buf = bytearray()
         self._seq = 0
         self._speaking = False
 
@@ -133,6 +137,28 @@ class GrpcMediaAdapter:
         while len(self._reframe_buf) >= _INTERNAL_FRAME_BYTES:
             frame = bytes(self._reframe_buf[:_INTERNAL_FRAME_BYTES])
             del self._reframe_buf[:_INTERNAL_FRAME_BYTES]
+            try:
+                self._in.put_nowait(frame)
+            except asyncio.QueueFull:
+                return
+
+    def push_inbound_opus(self, opus_payload: bytes) -> None:
+        """Feature 025: decode an upstream Opus mic packet to 48 kHz s16 mono,
+        reframe to 20 ms (1920 B), and enqueue for ``Session`` — the same queue
+        the PCM path feeds, so STT sees identical 48 kHz audio. A malformed
+        packet decodes to empty (a localized gap), never raising (FR-007).
+        Drops on a full queue rather than blocking the read loop (FR-021)."""
+        if self._closed or not opus_payload:
+            return
+        if self._opus_dec is None:
+            self._opus_dec = _codec.OpusDecoder48k()
+        pcm48 = self._opus_dec.decode(opus_payload)
+        if not pcm48:
+            return  # malformed/empty -> localized gap
+        self._opus_reframe_buf.extend(pcm48)
+        while len(self._opus_reframe_buf) >= _INTERNAL_FRAME_BYTES:
+            frame = bytes(self._opus_reframe_buf[:_INTERNAL_FRAME_BYTES])
+            del self._opus_reframe_buf[:_INTERNAL_FRAME_BYTES]
             try:
                 self._in.put_nowait(frame)
             except asyncio.QueueFull:

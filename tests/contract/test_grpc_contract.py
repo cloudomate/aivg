@@ -33,8 +33,12 @@ def _free_port() -> int:
 
 
 def test_audio_messages_and_oneofs():
+    # Feature 025 adds the additive Opus mic arm `opus` (field 4).
     client_oneof = {f.name for f in audio_pb2.ClientFrame.DESCRIPTOR.oneofs_by_name["body"].fields}
-    assert client_oneof == {"session", "pcm", "event"}
+    assert client_oneof == {"session", "pcm", "event", "opus"}
+    assert audio_pb2.ClientFrame.DESCRIPTOR.fields_by_name["opus"].number == 4
+    assert {f.name for f in audio_pb2.OpusChunk.DESCRIPTOR.fields} == {"payload", "ts_ns"}
+    assert "upstream_codec_pref" in audio_pb2.SessionHeader.DESCRIPTOR.fields_by_name
     server_oneof = {f.name for f in audio_pb2.ServerFrame.DESCRIPTOR.oneofs_by_name["body"].fields}
     assert server_oneof == {"audio", "event", "transcript"}
 

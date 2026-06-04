@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased] — Feature 025: Opus upstream (mic → STT) on gRPC
+
+### Added
+
+- **Opus mic uplink** (additive `ClientFrame.opus` arm + `SessionHeader.
+  upstream_codec_pref`). A native gRPC satellite can Opus-compress its
+  microphone audio (~10× less uplink bandwidth) instead of streaming raw 16 kHz
+  PCM; the gateway decodes it to 48 kHz and feeds STT exactly like the raw-PCM
+  path (no recognition-quality change). Gateway: `GrpcMediaAdapter.
+  push_inbound_opus` + `codec.OpusDecoder48k` (PyAV libopus); a malformed packet
+  is a localized gap, never a session failure. C++ SDK: `GrpcTransport::send_mic`
+  Opus-encodes the 48 kHz mic via `OpusBridge`, capture rate is
+  negotiation-dependent (`mic_frame_samples()` 960 Opus / 320 PCM, no on-device
+  resampler), advertises `[Opus, PCM_16K]` upstream prefs. New
+  `SatelliteOptions.grpc_upstream_opus` (opt-in, default false).
+
+### Changed
+
+- Wire-contract version `0.3.0` → **`0.4.0`** (additive — adds the upstream Opus
+  mic arm; old peers ignore it and stay on raw 16 kHz PCM, so existing
+  satellites are unaffected). Enables on-device Opus encode on the gRPC (RPi)
+  tier; ESP32 stays on WebRTC.
+
 ## [0.3.2] — 2026-06-03 — Feature 024: full-band Opus downstream (gRPC)
 
 ### Changed

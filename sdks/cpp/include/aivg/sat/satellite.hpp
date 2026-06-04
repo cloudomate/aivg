@@ -61,6 +61,11 @@ struct SatelliteOptions {
   // advertised as a fallback. Set false to force the 16 kHz PCM downstream.
   // No effect on WebRTC. Default true (the native tier plays at 48 kHz).
   bool grpc_downstream_opus = true;
+  // Feature 025 — Opus-encode the UPSTREAM (mic) audio on-device and send it
+  // compressed (48 kHz capture, ~10x smaller uplink); the gateway decodes
+  // before STT. 16 kHz PCM is always advertised as a fallback. Opt-in (default
+  // false) — enable on the RPi-class gRPC tier. No effect on WebRTC.
+  bool grpc_upstream_opus = false;
 };
 
 // Owns one always-on control-plane WS and at most one active WebRTC voice

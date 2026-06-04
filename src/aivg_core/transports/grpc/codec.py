@@ -119,3 +119,35 @@ class OpusEncoder48k:
     def flush(self) -> "list[bytes]":
         """Drain any buffered packets (call once when the session closes)."""
         return [bytes(p) for p in self._ctx.encode(None)]
+
+
+class OpusDecoder48k:
+    """Stateful 48 kHz mono Opus decoder (libopus via PyAV). Decodes one upstream
+    Opus mic packet to 48 kHz s16 mono PCM (feature 025). Returns ``b""`` (never
+    raises) on a malformed/undecodable packet so a bad frame is a localized audio
+    gap, not a session failure (FR-007)."""
+
+    SR = 48000
+
+    def __init__(self) -> None:
+        import av  # noqa: WPS433
+
+        self._av = av
+        ctx = av.codec.CodecContext.create("libopus", "r")
+        ctx.sample_rate = self.SR
+        ctx.format = "s16"
+        ctx.layout = "mono"
+        ctx.open()
+        self._ctx = ctx
+
+    def decode(self, payload: bytes) -> bytes:
+        if not payload:
+            return b""
+        try:
+            out = bytearray()
+            for frame in self._ctx.decode(self._av.Packet(payload)):
+                b = bytes(frame.planes[0])
+                out += b[: frame.samples * 2]  # s16 mono -> 2 bytes/sample
+            return bytes(out)
+        except Exception:  # noqa: BLE001 - drop a bad packet (FR-007), never raise
+            return b""
