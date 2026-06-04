@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — Feature 025: Opus upstream (mic → STT) on gRPC
+## [0.4.0] — 2026-06-04 — Feature 025: Opus upstream (mic → STT) on gRPC
 
 ### Added
 
